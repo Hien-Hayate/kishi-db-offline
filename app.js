@@ -1,0 +1,190 @@
+/* Stage19-1A. No network services, account, or external library is required. */
+(function(){
+  'use strict';
+  const C=window.KishiCore, KEY='banjo-kishi-db-v1', $=id=>document.getElementById(id);
+  const clone=o=>JSON.parse(JSON.stringify(o));
+  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  let db=null, idx, storageIssue='',storedRevision=null;
+  try{storedRevision=localStorage.getItem(KEY);if(storedRevision)db=C.validate(JSON.parse(storedRevision));}catch(e){storageIssue='保存データを読み込めなかったため、データの読み込み画面を表示しています。保存済みデータは削除していません。編集する前にJSONバックアップから復元してください。';}
+  if(db)C.validate(db);idx=C.index(db||{records:[],players:[],periods:[]});
+  const ui={view:'player',selected:db?.players[0]?.id||null,query:'',period:85,klass:'',event:'',blank:false,compare:[]};
+  if(db&&!idx.periods.has(ui.period))ui.period=db.periods.at(-1).id;
+  const get=(id,p)=>idx.records.get(id+':'+p);
+  const normalize=s=>s.normalize('NFKC').replace(/\s/g,'');
+  const nameList=()=>db.players.filter(p=>normalize(p.name).includes(normalize(ui.query)));
+  function notice(s){$('notice').textContent=s;$('notice').hidden=!s;}
+  function color(r){const c=r&&db.palette[String(r.fill)]?.color;return c&&/^#[0-9a-f]{6}$/i.test(c)?c:'';}
+  function badge(r){if(!r)return '';return '<span class="badge"'+(color(r)?' style="background:'+color(r)+'"':'')+'>'+ (esc(C.displayClass(db,r))||'&nbsp;')+'</span>';}
+  function recordButton(id,p,r){const label=C.displayClass(db,r)||'空白';return '<button class="'+(r?'edit-cell':'blank')+'" data-edit="'+esc(id)+'" data-period="'+p+'" aria-label="第'+p+'期 '+esc(label)+'の記録を編集">'+badge(r)+'</button>';}
+  function options(items,value){return items.map(([v,t])=>'<option value="'+esc(v)+'"'+(String(v)===String(value)?' selected':'')+'>'+esc(t)+'</option>').join('');}
+  function phase(p){return p.pointsBasis==='start'?'期首':'年度末';}
+  function renderHeader(){
+    $('sourceCount').textContent=db.players.length+'棋士 / '+db.periods.length+'期';
+    const p=db.periods.at(-1);$('sourcePeriod').textContent='第'+p.id+'期まで収録'+(p.ongoing?' · 進行中':'');
+    document.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.view===ui.view)));
+  }
+  function renderControls(){
+    let h='';
+    if(ui.view==='player')h='<label class="search">棋士名で探す<input id="search" type="search" placeholder="棋士名を入力" value="'+esc(ui.query)+'" autocomplete="off"></label><label class="check"><input type="checkbox" id="showBlank"'+(ui.blank?' checked':'')+'>空白の期も表示</label><button id="addPlayer">棋士追加</button>';
+    if(ui.view==='season'){
+      h='<label>期<select id="periodSelect">'+options([...db.periods].reverse().map(p=>[p.id,'第'+p.id+'期 · '+p.fiscalYear+'年度']),ui.period)+'</select></label>';
+      h+='<label>所属<select id="classFilter">'+options([['','すべて'],...['名','A','B','B1','B2','C','C1','C2','陥編','宣言'].map(x=>[x,x])],ui.klass)+'</select></label>';
+      h+='<label>記録<select id="eventFilter">'+options([['','すべて'],...Object.entries(C.LABELS)],ui.event)+'</select></label>';
+      h+='<label class="check"><input type="checkbox" id="showBlank"'+(ui.blank?' checked':'')+'>空白の棋士も表示</label>';
+    }
+    if(ui.view==='compare')h='<label class="choose">比較する棋士<select id="compareSelect">'+options([['','棋士を選択'],...db.players.map(p=>[p.id,p.name])],'')+'</select></label><button id="addCompare">比較に追加</button><span class="muted">最大4人</span>';
+    $('controls').innerHTML=h;
+    $('search')?.addEventListener('input',e=>{ui.query=e.target.value;const list=nameList();if(list.length&&!list.some(p=>p.id===ui.selected))ui.selected=list[0].id;renderContent();});
+    $('showBlank')?.addEventListener('change',e=>{ui.blank=e.target.checked;renderContent();});
+    $('addPlayer')?.addEventListener('click',()=>editProfile(null));
+    $('periodSelect')?.addEventListener('change',e=>{ui.period=Number(e.target.value);renderContent();});
+    $('classFilter')?.addEventListener('change',e=>{ui.klass=e.target.value;renderContent();});
+    $('eventFilter')?.addEventListener('change',e=>{ui.event=e.target.value;renderContent();});
+    $('addCompare')?.addEventListener('click',()=>{const id=$('compareSelect').value;if(!id)return;if(ui.compare.includes(id))return notice('その棋士は比較に追加済みです。');if(ui.compare.length>=4)return notice('比較は4人までです。');ui.compare.push(id);notice('');renderContent();});
+  }
+  function renderPlayer(){
+    const list=nameList(),p=idx.players.get(ui.selected);
+    let h='<div class="split"><aside class="roster"><div class="roster-heading">棋士一覧 <span>'+list.length+'人</span></div><div class="roster-list">';
+    h+=list.map(x=>'<button data-player="'+esc(x.id)+'" class="'+(x.id===ui.selected?'active':'')+'"'+(x.id===ui.selected?' aria-current="true"':'')+'><span>'+esc(x.name)+'</span><small>'+esc(x.number?'No. '+x.number:'')+'</small></button>').join('')||'<p class="empty">該当する棋士はいません。</p>';
+    h+='</div></aside>';
+    if(!list.length)return h+'<div class="profile empty">棋士名を変えて検索してください。</div></div>';
+    const rs=db.periods.map(t=>get(p.id,t.id)).filter(Boolean),wins=rs.filter(r=>C.event(db,r)==='win').length;
+    const first=rs[0],last=rs.at(-1),birth=p.birth||'不明';
+    h+='<article class="profile"><div class="profile-header"><div><p class="eyebrow">'+esc(p.number?'棋士番号 '+p.number:'棋士別記録')+'</p><h2>'+esc(p.name)+'</h2><div class="profile-meta">生年月日 '+esc(birth)+'<br>四段昇段年 '+esc(p.proYear||'不明')+'</div></div><button id="editProfile">棋士情報編集</button></div>';
+    h+='<div class="summary"><div><strong>'+rs.length+'期</strong><small>色のある空欄も含む記録数</small></div><div><strong>'+wins+'回</strong><small>七番勝負勝利</small></div><div><strong>'+esc(first?'第'+first.period+'〜'+last.period+'期':'')+'</strong><small>収録記録の範囲</small></div></div>';
+    if(rs.length)h+='<div class="ribbon" aria-label="クラス推移">'+rs.map(r=>'<div class="ribbon-item"><span>'+r.period+'期</span><button data-scroll="'+r.period+'" style="'+(color(r)?'background:'+color(r):'')+'" aria-label="第'+r.period+'期の行へ">'+(esc(C.displayClass(db,r))||'&nbsp;')+'</button></div>').join('')+'</div>';
+    h+='<div class="table-wrap"><table><thead><tr><th>期・年度</th><th>年度末年齢</th><th>所属</th><th>記録</th></tr></thead><tbody>';
+    for(const t of [...db.periods].reverse()){
+      const r=get(p.id,t.id);if(!r&&!ui.blank)continue;
+      const age=C.ageAt(p.birth,t.ageAt);
+      h+='<tr id="period-row-'+t.id+'"><td><button class="period-link" data-season="'+t.id+'">第'+t.id+'期</button><span class="sub">'+t.fiscalYear+'年度'+(t.ongoing?' · 進行中':'')+'</span></td><td>'+esc(age===null?'不明':age+'歳')+'</td><td>'+recordButton(p.id,t.id,r)+'</td><td class="event">'+esc(r?C.describe(db,r,t):'')+'</td></tr>';
+    }
+    h+='</tbody></table>'+(rs.length?'':'<p class="empty">順位戦の記録はありません。空白の期を表示して記録を追加できます。</p>')+'</div></article></div>';return h;
+  }
+  function renderSeason(){
+    const t=idx.periods.get(ui.period);
+    const list=db.players.filter(p=>{const r=get(p.id,t.id);return (r||ui.blank)&&(!ui.klass||C.displayClass(db,r)===ui.klass)&&(!ui.event||C.event(db,r)===ui.event);});
+    let h='<article class="profile"><div class="section-head"><div><p class="eyebrow">'+t.fiscalYear+'年度 / 名人戦 '+t.meijinYear+'年</p><h2>第'+t.id+'期 順位戦</h2><p>'+list.length+'人を表示 · 降級点は'+phase(t)+'時点'+(t.ongoing?' · 進行中':'')+(t.note?'<br>'+esc(t.note):'')+'</p></div><button id="editPeriod">期の設定</button></div><div class="table-wrap"><table><thead><tr><th>棋士</th><th>年度末年齢</th><th>所属</th><th>記録</th></tr></thead><tbody>';
+    h+=list.map(p=>{const r=get(p.id,t.id),age=C.ageAt(p.birth,t.ageAt);return '<tr><td><button class="period-link" data-open-player="'+esc(p.id)+'">'+esc(p.name)+'</button></td><td>'+esc(age===null?'不明':age+'歳')+'</td><td>'+recordButton(p.id,t.id,r)+'</td><td class="event">'+esc(r?C.describe(db,r,t):'')+'</td></tr>';}).join('');
+    return h+'</tbody></table>'+(list.length?'':'<p class="empty">条件に合う記録はありません。</p>')+'</div></article>';
+  }
+  function renderCompare(){
+    const people=ui.compare.map(id=>idx.players.get(id)).filter(Boolean);
+    let h='<p class="hint">年齢は各期の年度末（3月31日）で統一。生年月日が不明の棋士は年齢へ対応させません。</p><div class="chips">'+people.map(p=>'<button class="chip" data-remove="'+esc(p.id)+'" aria-label="'+esc(p.name)+'を比較から外す">'+esc(p.name)+' ×</button>').join('')+'</div>';
+    if(!people.length)return h+'<div class="profile empty">比較する棋士を選んで追加してください。</div>';
+    const maps=people.map(p=>{const m=new Map();for(const t of db.periods){const r=get(p.id,t.id),a=C.ageAt(p.birth,t.ageAt);if(r&&a!==null){const entries=m.get(a)||[];entries.push({r,t});m.set(a,entries);}}return m;});
+    const ages=[...new Set(maps.flatMap(m=>[...m.keys()]))].sort((a,b)=>a-b);
+    h+='<article class="profile"><div class="table-wrap"><table class="compare-table"><thead><tr><th>年度末年齢</th>'+people.map(p=>'<th>'+esc(p.name)+(p.birth?'':'<span class="sub">生年月日不明</span>')+'</th>').join('')+'</tr></thead><tbody>';
+    h+=ages.map(a=>'<tr><td>'+a+'歳</td>'+maps.map(m=>'<td>'+ (m.get(a)||[]).map(({r,t})=>recordButton(r.player,t.id,r)+'<span class="sub">第'+t.id+'期 · '+t.fiscalYear+'年度</span><span class="sub">'+esc(C.describe(db,r,t))+'</span>').join('')+'</td>').join('')+'</tr>').join('');
+    return h+'</tbody></table>'+(ages.length?'':'<p class="empty">年齢に対応できる記録がありません。</p>')+'</div></article>';
+  }
+  function renderContent(){
+    $('content').innerHTML=ui.view==='player'?renderPlayer():ui.view==='season'?renderSeason():renderCompare();
+    $('editProfile')?.addEventListener('click',()=>editProfile(ui.selected));
+    $('editPeriod')?.addEventListener('click',()=>editPeriod(ui.period));
+    $('content').querySelectorAll('[data-player],[data-open-player]').forEach(b=>b.addEventListener('click',()=>{ui.selected=b.dataset.player||b.dataset.openPlayer;ui.view='player';ui.query='';render();}));
+    $('content').querySelectorAll('[data-season]').forEach(b=>b.addEventListener('click',()=>{ui.period=Number(b.dataset.season);ui.view='season';render();}));
+    $('content').querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click',()=>editRecord(b.dataset.edit,Number(b.dataset.period))));
+    $('content').querySelectorAll('[data-scroll]').forEach(b=>b.addEventListener('click',()=>{const row=$('period-row-'+b.dataset.scroll);row?.scrollIntoView({behavior:'smooth',block:'center'});}));
+    $('content').querySelectorAll('[data-remove]').forEach(b=>b.addEventListener('click',()=>{ui.compare=ui.compare.filter(id=>id!==b.dataset.remove);renderContent();}));
+  }
+  function render(){
+    document.querySelectorAll('[data-view]').forEach(b=>b.disabled=!db);
+    if(!db){
+      $('sourceCount').textContent='データ未読み込み';$('sourcePeriod').textContent='データはこの端末で読み込みます';$('controls').innerHTML='';
+      $('content').innerHTML='<article class="profile empty"><h2>棋士データを読み込む</h2><p>このアプリには棋士データを同梱していません。<br>手元の初期データJSON、または保存済みのバックアップを選んでください。</p><button id="loadInitial" class="primary">データファイルを選ぶ</button><p class="hint" style="margin:18px 0 0">ファイルは端末内で読み込みます。GitHubへの送信は行いません。<br>ホーム画面に追加して使う場合は、そのアイコンから開いて読み込んでください。</p></article>';
+      $('loadInitial').onclick=()=>$('importInput').click();return;
+    }
+    renderHeader();renderControls();renderContent();
+  }
+  function openModal(title,body,save,label='保存'){
+    $('modalTitle').textContent=title;$('modalBody').innerHTML=body;
+    $('modalActions').innerHTML=save?'<button type="button" id="cancelModal">キャンセル</button><button type="submit" class="primary">'+esc(label)+'</button>':'';
+    $('cancelModal')?.addEventListener('click',()=>$('modal').close());
+    $('modalForm').onsubmit=e=>{e.preventDefault();if(save){try{save();}catch(err){showModalError(err.message);}}};
+    if(!$('modal').open)$('modal').showModal();
+  }
+  function showModalError(s){let e=$('modalError');if(!e){e=document.createElement('p');e.id='modalError';e.className='notice';e.setAttribute('role','alert');$('modalBody').prepend(e);}e.textContent=s;}
+  function commit(next,message='変更をこの端末に保存しました。',restoring=false){
+    C.validate(next);
+    if(storageIssue&&!restoring)throw new Error('保存データの読み込みに問題があります。JSONバックアップから復元してから編集してください。');
+    let current;
+    try{current=localStorage.getItem(KEY);}catch(e){throw new Error('端末の保存データを確認できませんでした。変更は適用していません。');}
+    if(current!==storedRevision)throw new Error('別の画面でデータが更新されています。この画面を読み込み直してから編集してください。変更は適用していません。');
+    const serialized=JSON.stringify(next);
+    try{localStorage.setItem(KEY,serialized);}catch(e){throw new Error('端末に保存できませんでした。空き容量やブラウザの保存設定を確認してください。変更は適用していません。');}
+    storedRevision=serialized;storageIssue='';
+    db=next;idx=C.index(db);
+    if(!idx.players.has(ui.selected))ui.selected=db.players[0].id;
+    if(!idx.periods.has(ui.period))ui.period=db.periods.at(-1).id;
+    ui.compare=ui.compare.filter(id=>idx.players.has(id));
+    $('modal').close();render();notice(message);
+  }
+  function editRecord(id,period){
+    const p=idx.players.get(id),t=idx.periods.get(period),r=get(id,period);
+    const palette=Object.entries(db.palette).filter(([i,v])=>i==='0'||v.color&&(v.event!=='unknown'||Number(i)===r?.fill));
+    const label=([i,v])=>i==='0'?'色なし':v.event==='demerit'?(v.label||'降級点の色（点数未確認）'):C.LABELS[v.event]||'元の色（未確認）';
+    openModal(p.name+' · 第'+period+'期', '<p class="dialog-note">'+t.fiscalYear+'年度。降級点は'+phase(t)+'時点。元の文字と色は別々に保存します。</p><div class="form-grid"><label>元のクラス表記<input id="recordRaw" maxlength="100" value="'+esc(r?.raw||'')+'" list="classList"><datalist id="classList">'+['名','A','B','B1','B2','C','C1','C2'].map(x=>'<option value="'+x+'"></option>').join('')+'</datalist></label><label>色の意味<select id="recordFill">'+options(palette.map(v=>[v[0],label(v)]),r?.fill||0)+'</select></label><label class="wide">名人戦の対局前の立場<select id="recordRole">'+options([['','未確認・対象外'],['holder','名人'],['challenger','挑戦者']],r?.role||'')+'</select></label></div><p class="dialog-note">文字を空欄、色を「色なし」にすると空白になります。引退日は作りません。<br>出典：'+esc(r?.cell||'アプリ内入力')+'</p>',()=>{
+      const raw=$('recordRaw').value,fill=Number($('recordFill').value),role=$('recordRole').value,next=clone(db);
+      const at=next.records.findIndex(x=>x.player===id&&x.period===period);
+      const row={...(r||{}),player:id,period,raw,fill,role,editedAt:new Date().toISOString()};
+      if(role!==r?.role)row.roleSource='アプリ内編集';
+      if(!raw&&fill===0){if(at>=0)next.records.splice(at,1);}else if(at>=0)next.records[at]=row;else next.records.push(row);
+      commit(next);
+    });
+  }
+  function editProfile(id){
+    const p=idx.players.get(id);
+    openModal(p?'棋士情報の編集':'棋士を追加','<div class="form-grid"><label class="wide">棋士名<input id="personName" required maxlength="100" value="'+esc(p?.name||'')+'"></label><label>棋士番号<input id="personNumber" maxlength="100" value="'+esc(p?.number||'')+'"></label><label>四段昇段年<input id="personPro" maxlength="100" value="'+esc(p?.proYear||'')+'"></label><label class="wide">生年月日（不明なら空欄）<input type="date" id="personBirth" value="'+esc(p?.birth||'')+'"></label></div><p class="dialog-note">年齢は順位戦年度末の3月31日時点で計算します。<br>生年月日の出典：'+esc(p?.birthSource?.cell||'アプリ内入力')+(p?.birthSource?' / 元の値：'+esc(p.birthSource.raw):'')+'</p>',()=>{
+      const next=clone(db),birth=$('personBirth').value||null,name=$('personName').value.trim();
+      if(!name)throw new Error('棋士名を入力してください。');
+      if(next.players.some(x=>x.name===name&&x.id!==id))throw new Error('同じ名前の棋士が登録されています。');
+      const item={...(p||{}),id:id||'user-'+(crypto.randomUUID?.()||Date.now()+'-'+Math.random().toString(16).slice(2)),name,birth,number:$('personNumber').value||null,proYear:$('personPro').value,editedAt:new Date().toISOString()};
+      if(p?.birth!==birth)item.birthEdited=true;
+      if(p)next.players[next.players.findIndex(x=>x.id===id)]=item;else next.players.push(item);
+      commit(next);ui.selected=item.id;ui.query='';ui.view='player';render();
+    });
+  }
+  function editPeriod(id){const p=idx.periods.get(id);
+    openModal('第'+id+'期の設定','<p class="dialog-note">Excelの更新に合わせて変更します。日付による自動切り替えは行いません。</p><div class="form-grid"><label>降級点の基準<select id="pointsBasis">'+options([['start','期首時点'],['end','年度末時点']],p.pointsBasis)+'</select></label><label>開催状況<select id="ongoing">'+options([['yes','進行中'],['no','終了']],p.ongoing?'yes':'no')+'</select></label></div><p class="dialog-note">基準を切り替えても、記録された色そのものは変更しません。終了時は点数の記録も更新してください。</p>',()=>{const next=clone(db),t=next.periods.find(x=>x.id===id);t.pointsBasis=$('pointsBasis').value;t.ongoing=$('ongoing').value==='yes';commit(next);});
+  }
+  function backup(prefix='backup'){const json=db?JSON.stringify(db,null,2):(storedRevision||'null'),blob=new Blob([json],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='banjo_kishi_stage19_1a_'+prefix+'_'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}
+  function manage(){
+    if(!db){openModal('データの読み込み','<p class="dialog-note">初期データJSONまたはバックアップを選んで、この端末へ読み込みます。</p><button type="button" id="chooseData">データファイルを選ぶ</button>',null);$('chooseData').onclick=()=>$('importInput').click();return;}
+    openModal('データ管理','<p class="dialog-note">変更はこの端末・このブラウザに保存します。別端末へ移すときやアプリを置き換える前に、JSONバックアップを保存してください。</p><div class="management"><button type="button" id="exportButton">JSONバックアップを保存</button><button type="button" id="importButton">JSONバックアップから復元</button><button type="button" id="phaseButton">第'+ui.period+'期の降級点・開催状況</button><button type="button" id="updateButton">アプリの更新を確認</button></div><p class="dialog-note">読み込み元：'+esc(db.source?.filename||'JSONバックアップ')+'<br>取り込み範囲：順位戦、順位2の生年月日。その他の成績は未取り込み。Excelの直接読み込みはこの試作には含みません。</p>',null);
+    $('exportButton').onclick=()=>{backup();notice('バックアップの保存を開始しました。保存先のファイルを確認してください。');};
+    $('importButton').onclick=()=>$('importInput').click();
+    $('phaseButton').onclick=()=>editPeriod(ui.period);
+    $('updateButton').onclick=async()=>{try{const reg=await navigator.serviceWorker?.getRegistration();if(!reg)return showModalError('ブラウザで配信URLを開いた場合に更新を確認できます。');await reg.update();showModalError(reg.waiting?'新しい版があります。このアプリの画面をすべて閉じてから開き直してください。':'更新確認を行いました。新しい版がある場合は、画面を閉じてから開き直してください。');}catch(e){showModalError('更新を確認できませんでした。接続を確認してください。');}};
+  }
+  $('importInput').addEventListener('change',async e=>{
+    const file=e.target.files[0];e.target.value='';if(!file)return;
+    try{
+      if(file.size>20*1024*1024)throw new Error('この試作で復元できるJSONは20MBまでです。');
+      const next=C.validate(JSON.parse(await file.text()));
+      if(!db&&!storedRevision){
+        openModal('初期データを読み込む','<p class="dialog-note">'+next.players.length+'棋士・'+next.periods.length+'期のデータを、この端末に保存します。ファイルを外部へ送信しません。</p>',()=>commit(next,'データをこの端末に読み込みました。',true),'この端末に読み込む');return;
+      }
+      openModal('バックアップを復元','<p class="dialog-note">'+next.players.length+'棋士・'+next.periods.length+'期のデータで、現在の端末のデータを置き換えます。</p><p class="dialog-note">先に現在のJSONバックアップを保存し、保存できたことを確認してから復元してください。</p><button type="button" id="preBackup">現在のバックアップを保存</button><label class="check" style="margin-top:15px"><input id="restoreCheck" type="checkbox" required>現在のデータを退避し、置き換えることを確認した</label>',()=>{if(!$('restoreCheck').checked)throw new Error('退避と置き換えの確認が必要です。');commit(next,'JSONバックアップから復元しました。',true);},'このデータで復元');
+      $('preBackup').onclick=()=>backup('before_restore');
+    }catch(err){if(!$('modal').open)openModal('読み込みエラー','<p class="dialog-note">'+esc(err.message)+'</p>',null);else showModalError(err.message);}
+  });
+  function rules(){openModal('データの読み方','<ul><li>文字も色もないセルは空白。引退日や未参加を推定しません。</li><li>色のある空欄は情報を残します。「陥編」「宣言」は表示用の短縮名です。</li><li>降級点は終了済みの期では年度末、85期では期首時点。1点・2点の色対応は確認前なので「点数未確認」と表示します。</li><li>灰色のうち凡例と一致する色は休場。それ以外の色は意味を断定せず残しています。</li><li>金色は七番勝負勝利、黄色は敗退。名人・挑戦者の立場が確認された記録のみ「防衛」「獲得ならず」などに分けます。</li><li>初期のB・Cはそのまま表示。第30期の次は第36期で、欠番を生成しません。</li><li>年齢は順位戦年度末の3月31日。Excelの生年月日からの計算であり、Class記載の年齢は取り込んでいません。</li><li>引退確定と最後の棋戦を終えての引退は別です。空白からいずれの日付も作りません。</li></ul><p class="dialog-note">個人用の試作です。Excelの記録を参照し、外部資料による最新情報の補完はしていません。</p>',null);}
+  $('dataButton').onclick=manage;$('rulesButton').onclick=rules;$('closeModal').onclick=()=>$('modal').close();
+  document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{ui.view=b.dataset.view;render();});
+  render();if(storageIssue)notice(storageIssue);
+  async function setupOffline(){
+    const el=$('offlineStatus');
+    if(location.protocol==='file:'){el.textContent='ファイルで閲覧中 · 配信URLではPWAとして保存可能';return;}
+    if(!('serviceWorker' in navigator)){el.textContent='このブラウザはPWA保存に未対応';return;}
+    try{
+      const reg=await navigator.serviceWorker.register('./sw.js');
+      await navigator.serviceWorker.ready;
+      const worker=reg.active;if(!worker){el.textContent='オフライン準備中';return;}
+      const ready=await new Promise(resolve=>{const channel=new MessageChannel();const timer=setTimeout(()=>{channel.port1.close();resolve(false);},6000);channel.port1.onmessage=e=>{clearTimeout(timer);channel.port1.close();resolve(!!e.data?.ready);};worker.postMessage('CHECK_SHELL',[channel.port2]);});
+      el.textContent=ready?'オフライン利用の準備完了':'オフライン保存を確認できませんでした';
+      if(reg.waiting)notice('新しい版があります。このアプリの画面をすべて閉じて開き直すと更新されます。');
+    }catch(e){el.textContent='オフライン保存未完了 · 通信時に再度開いてください';}
+  }
+  setupOffline();
+})();
