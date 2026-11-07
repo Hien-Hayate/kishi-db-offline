@@ -1,4 +1,4 @@
-const VERSION='banjo-kishi-shell-stage19-1b-v1';
+const VERSION='banjo-kishi-shell-stage19-2-v1';
 const SHELL=['./','./index.html','./style.css','./core.js','./app.js','./manifest.webmanifest','./icon.svg','./icon-192.png','./icon-512.png'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(VERSION).then(cache=>cache.addAll(SHELL.map(path=>new Request(new URL(path,self.registration.scope),{cache:'reload'}))))));
 self.addEventListener('activate',event=>event.waitUntil((async()=>{
