@@ -4,7 +4,7 @@
   // Legacy source metadata stays readable; these are not editable record events.
   const SOURCE_EVENTS=[...EVENTS,'demerit','declared','transferred'];
   const LABELS={win:'七番勝負勝利',loss:'七番勝負敗退',promotion:'昇級',demotion:'降級',absence:'休場',unknown:'色の意味未確認'};
-  const TITLE_LABELS={'獲':'獲得','防':'防衛','奪':'奪取','失':'失冠','挑':'挑戦敗退','対':'対','留':'留位'};
+  const TITLE_LABELS={'獲':'獲得','防':'防衛','奪':'奪取','失':'失冠','挑':'挑戦','対':'対','留':'留位'};
   const titleWon=code=>['獲','防','奪','留'].includes(code);
   const classKey=s=>s==='名人'?'名':s==='竜王'?'竜':s;
   const classText=s=>s==='名'?'名人':s==='竜'?'竜王':s;

@@ -43,3 +43,5 @@
   .player-timeline .supplementary-year .timeline-period{grid-column:1/4;grid-row:1/3;font-size:.94rem}
   .player-timeline .supplementary-year .timeline-empty,.player-timeline .supplementary-year .timeline-result{display:none}
 }
+
+.annual-title-won,.title-result.title-won{font-weight:700;color:#164d3d}
