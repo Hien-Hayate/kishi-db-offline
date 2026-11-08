@@ -2,19 +2,19 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#163e38"><meta name="description" content="順位戦と竜王戦の棋歴を、棋士・期・年齢からたどる個人用オフラインデータベース。">
+  <meta name="theme-color" content="#163e38"><meta name="description" content="順位戦・竜王戦の棋歴と、タイトル戦の確定順の記録をたどる個人用オフラインデータベース。">
   <link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="icon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="icon-192.png"><link rel="stylesheet" href="style.css">
-  <title>棋士データベース · Stage19-2A</title>
+  <title>棋士データベース · Stage19-3</title>
 </head>
 <body>
-  <header class="masthead"><div class="brand"><span class="mark" aria-hidden="true">棋</span><div><p class="eyebrow">盤上研究室 <span>Stage19-2A</span></p><h1>棋士データベース</h1></div></div><button id="dataButton" class="ghost">データ管理</button></header>
+  <header class="masthead"><div class="brand"><span class="mark" aria-hidden="true">棋</span><div><p class="eyebrow">盤上研究室 <span>Stage19-3</span></p><h1>棋士データベース</h1></div></div><button id="dataButton" class="ghost">データ管理</button></header>
   <main>
-    <section class="intro"><div><p class="eyebrow">順位戦と竜王戦の記録</p><h2>棋歴を、たどる。</h2><p>棋士ごとの歩み、同じ期の顔ぶれ、同じ年齢での比較。</p></div><div class="source-card"><strong id="sourceCount">読み込み中</strong><span id="sourcePeriod"></span><small id="offlineStatus" role="status">オフライン準備を確認中</small></div></section>
+    <section class="intro"><div><p class="eyebrow">棋歴とタイトル戦の記録</p><h2>棋歴を、たどる。</h2><p>棋士ごとの歩み、同年齢比較、タイトル戦の歴史。</p></div><div class="source-card"><strong id="sourceCount">読み込み中</strong><span id="sourcePeriod"></span><small id="offlineStatus" role="status">オフライン準備を確認中</small></div></section>
     <p id="notice" class="notice" role="status" hidden></p>
-    <nav class="tabs" aria-label="表示の切り替え"><button data-view="player" aria-pressed="true">棋士別年表</button><button data-view="season" aria-pressed="false">期別一覧</button><button data-view="compare" aria-pressed="false">同年齢比較</button></nav>
+    <nav class="tabs" aria-label="表示の切り替え"><button data-view="player" aria-pressed="true">棋士別年表</button><button data-view="season" aria-pressed="false">期別一覧</button><button data-view="compare" aria-pressed="false">同年齢比較</button><button data-view="titles" aria-pressed="false">タイトル戦</button></nav>
     <section id="controls" class="controls" aria-label="検索と絞り込み"></section>
     <section id="content" aria-live="polite"></section>
-    <footer><span>順位戦・竜王戦 / 個人用試作</span><button id="rulesButton" class="link">データの読み方</button></footer>
+    <footer><span>順位戦・竜王戦・タイトル戦 / 個人用試作</span><button id="rulesButton" class="link">データの読み方</button></footer>
   </main>
   <dialog id="modal"><form id="modalForm"><div class="dialog-heading"><h2 id="modalTitle"></h2><button type="button" id="closeModal" aria-label="閉じる">閉じる</button></div><div id="modalBody"></div><div id="modalActions" class="dialog-actions"></div></form></dialog>
   <input id="importInput" type="file" accept="application/json,.json" hidden>

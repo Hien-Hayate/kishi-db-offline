@@ -4,6 +4,13 @@
   // Legacy source metadata stays readable; these are not editable record events.
   const SOURCE_EVENTS=[...EVENTS,'demerit','declared','transferred'];
   const LABELS={win:'七番勝負勝利',loss:'七番勝負敗退',promotion:'昇級',demotion:'降級',absence:'休場',unknown:'色の意味未確認'};
+  const TITLE_LABELS={'獲':'獲得','防':'防衛','奪':'奪取','失':'失冠','挑':'挑戦敗退','対':'対','留':'留位'};
+  const titleWon=code=>['獲','防','奪','留'].includes(code);
+  const classKey=s=>s==='名人'?'名':s==='竜王'?'竜':s;
+  const classText=s=>s==='名'?'名人':s==='竜'?'竜王':s;
+  const classLabel=(db,r)=>classText(displayClass(db,r));
+  function titleHistory(db,player){return (db.titles?.events||[]).filter(e=>!player||e.participants.some(p=>p.player===player)).slice().sort((a,b)=>a.order-b.order);}
+  function titleTotals(db,player){const all=titleHistory(db,player);return {appearances:all.length,wins:all.reduce((n,e)=>n+Number(e.participants.some(p=>p.player===player&&titleWon(p.code))),0)};}
   // Normal class fills in 順位2, excluding result highlights. B/C remain distinct labels.
   const CLASS_COLORS={'名':'#ffd966','A':'#f4b183','B':'#f8cbad','B1':'#f8cbad','B2':'#fce4d6','C':'#dae3f3','C1':'#dae3f3','C2':'#b4c7e7','宣言':'#e2efda','陥編':'#c6e0b4'};
   const RYUO_COLORS={'竜':'#ffd966','1組':'#f4b183','2組':'#f8cbad','3組':'#fce4d6','4組':'#dae3f3','5組':'#b4c7e7','6組':'#8faadc','シ':'#ede4d1'};
@@ -21,7 +28,7 @@
   function ageAt(birth,date){if(!validDate(birth)||!validDate(date))return null;let a=Number(date.slice(0,4))-Number(birth.slice(0,4));if(date.slice(5)<birth.slice(5))a--;return a>=0?a:null;}
   function sourceEvent(db,r){return r?(db.palette[String(r.fill)]?.event??'unknown'):'';}
   function event(db,r){if(!r)return '';if(r.recordEvent!==undefined)return r.recordEvent;if(r.competition==='ryuo')return ryuoResult(db,r);const e=sourceEvent(db,r);return ['demerit','declared','transferred'].includes(e)?'':e;}
-  function displayClass(db,r){if(!r)return '';if(r.className!==undefined)return r.className;if(r.competition==='ryuo')return /^[1-6]$/.test(r.raw)?r.raw+'組':r.raw;const e=sourceEvent(db,r);if(e==='declared')return '宣言';if(e==='transferred')return '陥編';return r.raw;}
+  function displayClass(db,r){if(!r)return '';if(r.className!==undefined)return classKey(r.className);if(r.competition==='ryuo')return /^[1-6]$/.test(r.raw)?r.raw+'組':classKey(r.raw);const e=sourceEvent(db,r);if(e==='declared')return '宣言';if(e==='transferred')return '陥編';return classKey(r.raw);}
   function classColor(db,r){return (r?.competition==='ryuo'?RYUO_COLORS:CLASS_COLORS)[displayClass(db,r)]||'';}
   function titleStats(db,records){let appearances=0,wins=0;for(const r of records){const e=event(db,r);if(e==='win'){wins++;appearances++;}else if(e==='loss')appearances++;}return {appearances,wins};}
   function result(db,r){const e=event(db,r);if(r?.competition==='ryuo')return LABELS[e]||'';if(e==='win')return r.role==='holder'?'名人防衛':r.role==='challenger'?'名人獲得':'七番勝負勝利';if(e==='loss')return r.role==='holder'?'防衛失敗':r.role==='challenger'?'獲得ならず':'七番勝負敗退';return LABELS[e]||'';}
@@ -44,6 +51,16 @@
       const rp=new Set(),anchors=new Set(),rk=new Set();
       for(const p of db.ryuo.periods){const anchor=db.periods.find(j=>j.id===p.junniPeriod);if(!Number.isInteger(p.id)||p.id<1||rp.has(p.id)||anchors.has(p.junniPeriod)||!anchor||p.ageAt!==anchor.ageAt||typeof p.ongoing!=='boolean'||!str(p.note))fail();rp.add(p.id);anchors.add(p.junniPeriod);}
       for(const r of db.ryuo.records){const key=r.player+':'+r.period;if(r.competition!=='ryuo'||!ids.has(r.player)||!rp.has(r.period)||rk.has(key)||!str(r.raw,100)||!Number.isInteger(r.fill)||!Object.hasOwn(db.palette,String(r.fill))||typeof r.qualified!=='boolean'||typeof r.groupWinner!=='boolean'||typeof r.challenger!=='boolean'||(db.ryuo.resultMode==='yellow-loss'&&typeof r.loss!=='boolean')||(r.recordEvent!==undefined&&!EVENTS.includes(r.recordEvent))||(r.className!==undefined&&!str(r.className,100)))fail();rk.add(key);}
+    }
+    if(db.titles!==undefined){
+      if(!db.titles||!Array.isArray(db.titles.events)||db.titles.events.length>10000)fail();
+      const ti=new Set(),orders=new Set(),tp=new Set();
+      for(const e of db.titles.events){
+        const pair=e.title+':'+e.period;
+        if(!str(e.id,100)||!e.id||ti.has(e.id)||!Number.isInteger(e.order)||e.order<0||orders.has(e.order)||!Number.isInteger(e.meijinYear)||e.meijinYear<1500||e.meijinYear>2500||!str(e.title,100)||!e.title.trim()||!Number.isInteger(e.period)||e.period<1||tp.has(pair)||!Array.isArray(e.participants)||e.participants.length>1000||!e.participants.length||(e.note!==undefined&&!str(e.note,3000)))fail();
+        ti.add(e.id);orders.add(e.order);tp.add(pair);const people=new Set();
+        for(const p of e.participants){if(!ids.has(p.player)||people.has(p.player)||!Object.hasOwn(TITLE_LABELS,p.code))fail();people.add(p.player);}
+      }
     }
     return db;
   }
@@ -71,6 +88,20 @@
     const replaced=next.ryuo?.records.length||0;next.ryuo=JSON.parse(JSON.stringify(incoming.ryuo));
     delete next.delivery;validate(next);return {data:next,replaced,loaded:next.ryuo.records.length};
   }
-  const api={EVENTS,LABELS,CLASS_COLORS,RYUO_COLORS,validDate,ageAt,event,sourceEvent,displayClass,classColor,titleStats,result,describe,matchesEvent,index,validate,mergeRyuo,replaceRyuo};
+  function mergeTitles(current,incoming){
+    validate(current);validate(incoming);if(!incoming.titles)throw new Error('タイトル戦の追加データがありません。');
+    if(!current.source?.sha256||current.source.sha256!==incoming.source?.sha256)throw new Error('取り込み元の棋士データが一致しません。現在のデータは変更していません。');
+    const next=JSON.parse(JSON.stringify(current)),known=new Set(next.players.map(p=>p.id)),people=new Map(incoming.players.map(p=>[p.id,p]));
+    // Name-only matches are ambiguous after manual profile additions; never silently create a duplicate.
+    for(const e of incoming.titles.events)for(const p of e.participants)if(!known.has(p.player)){
+      const person=people.get(p.player);if(next.players.some(x=>x.name===person.name))throw new Error('同名の棋士が別IDで登録されています：'+person.name+'。追加データとの対応を確認してください。');
+      next.players.push(JSON.parse(JSON.stringify(person)));known.add(p.player);
+    }
+    if(!next.titles)next.titles={...JSON.parse(JSON.stringify(incoming.titles)),events:[]};
+    const ids=new Set(next.titles.events.map(e=>e.id)),pairs=new Set(next.titles.events.map(e=>e.title+':'+e.period)),orders=new Set(next.titles.events.map(e=>e.order));let added=0,kept=0;
+    for(const e of incoming.titles.events){if(ids.has(e.id)||pairs.has(e.title+':'+e.period)){kept++;continue;}if(orders.has(e.order))throw new Error('タイトル戦の確定順が既存記録と重なっています。現在のデータは変更していません。');next.titles.events.push(JSON.parse(JSON.stringify(e)));ids.add(e.id);pairs.add(e.title+':'+e.period);orders.add(e.order);added++;}
+    delete next.delivery;validate(next);return {data:next,added,kept};
+  }
+  const api={EVENTS,LABELS,CLASS_COLORS,RYUO_COLORS,TITLE_LABELS,titleWon,titleHistory,titleTotals,classText,classLabel,validDate,ageAt,event,sourceEvent,displayClass,classColor,titleStats,result,describe,matchesEvent,index,validate,mergeRyuo,replaceRyuo,mergeTitles};
   root.KishiCore=api;if(typeof module!=='undefined')module.exports=api;
 })(typeof window!=='undefined'?window:globalThis);
