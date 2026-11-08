@@ -13,16 +13,31 @@
   function titleTotals(db,player){const all=titleHistory(db,player);return {appearances:all.length,wins:all.reduce((n,e)=>n+Number(e.participants.some(p=>p.player===player&&titleWon(p.code))),0)};}
   function titleLine(entry,player){const p=entry.participants.find(p=>p.player===player);return p?'第'+entry.period+'期'+entry.title+(entry.title.endsWith('戦')?'':'戦')+' '+TITLE_LABELS[p.code]:'';}
   function playerTimeline(db,player,competition='junni'){
-    const byYear=new Map();
-    for(const e of titleHistory(db,player)){if(!byYear.has(e.meijinYear))byYear.set(e.meijinYear,[]);byYear.get(e.meijinYear).push(e);}
+    const byYear=new Map(),unmappedMeijin=new Map();
+    const meijinAnchors=new Map(db.periods.map(p=>[p.meijinYear,p]));
+    for(const e of titleHistory(db,player)){
+      const isMeijin=e.title==='名人'||e.title==='名人戦';
+      const anchor=isMeijin?meijinAnchors.get(e.meijinYear):null;
+      // Early Meijin events without a ranking anchor retain their source year separately.
+      if(isMeijin&&!anchor){if(!unmappedMeijin.has(e.meijinYear))unmappedMeijin.set(e.meijinYear,[]);unmappedMeijin.get(e.meijinYear).push(e);continue;}
+      const year=isMeijin?anchor.fiscalYear:e.meijinYear;
+      if(!byYear.has(year))byYear.set(year,[]);byYear.get(year).push(e);
+    }
+    const inCycle=events=>events.slice().sort((a,b)=>Number(a.title==='名人'||a.title==='名人戦')-Number(b.title==='名人'||b.title==='名人戦')||a.order-b.order);
     const allowed=new Set((db.ryuo?.periods||[]).map(p=>p.junniPeriod)),rows=[];
     for(const period of db.periods){
       if(competition==='ryuo'&&!allowed.has(period.id))continue;
-      rows.push({period,meijinYear:period.meijinYear,titles:byYear.get(period.meijinYear)||[]});byYear.delete(period.meijinYear);
+      rows.push({period,fiscalYear:period.fiscalYear,meijinYear:period.meijinYear,kind:'cycle',titles:inCycle(byYear.get(period.fiscalYear)||[])});byYear.delete(period.fiscalYear);
     }
     // These are display rows only, never synthetic competition periods or player records.
-    for(const [meijinYear,titles] of byYear)rows.push({period:null,meijinYear,titles});
-    return rows.sort((a,b)=>a.meijinYear-b.meijinYear);
+    for(const [fiscalYear,titles] of byYear){
+      const anchor=db.periods.find(p=>p.fiscalYear===fiscalYear);
+      // Explicit transition correspondence, not a universal year/period formula.
+      const meijinYear=anchor?.meijinYear??(fiscalYear===1976?1977:null);
+      rows.push({period:null,fiscalYear,meijinYear,kind:'cycle',titles:inCycle(titles)});
+    }
+    for(const [meijinYear,titles] of unmappedMeijin)rows.push({period:null,fiscalYear:null,meijinYear,kind:'source-meijin',titles});
+    return rows.sort((a,b)=>(a.fiscalYear??a.meijinYear)-(b.fiscalYear??b.meijinYear)||Number(a.kind!=='source-meijin')-Number(b.kind!=='source-meijin'));
   }
   // Normal class fills in 順位2, excluding result highlights. B/C remain distinct labels.
   const CLASS_COLORS={'名':'#ffd966','A':'#f4b183','B':'#f8cbad','B1':'#f8cbad','B2':'#fce4d6','C':'#dae3f3','C1':'#dae3f3','C2':'#b4c7e7','宣言':'#e2efda','陥編':'#c6e0b4'};
