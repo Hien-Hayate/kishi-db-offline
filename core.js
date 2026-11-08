@@ -10,10 +10,12 @@
   const ryuoCache=new WeakMap();
   function ryuoMap(db){if(!ryuoCache.has(db))ryuoCache.set(db,new Map((db.ryuo?.records||[]).map(r=>[r.player+':'+r.period,r])));return ryuoCache.get(db);}
   function ryuoResult(db,r){
-    if(!r)return '';const next=ryuoMap(db).get(r.player+':'+(r.period+1));
+    if(!r)return '';const directLoss=db.ryuo?.resultMode==='yellow-loss';
+    if(directLoss&&r.loss)return 'loss';
+    const next=ryuoMap(db).get(r.player+':'+(r.period+1));
     if(!next)return '';const nextClass=displayClass(db,next);if(!nextClass)return '';
     if(nextClass==='竜')return 'win';
-    if(displayClass(db,r)==='竜'||r.challenger)return 'loss';return '';
+    if(!directLoss&&(displayClass(db,r)==='竜'||r.challenger))return 'loss';return '';
   }
   function validDate(s){if(typeof s!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(s))return false;const d=new Date(s+'T00:00:00Z');return Number.isFinite(+d)&&d.toISOString().slice(0,10)===s;}
   function ageAt(birth,date){if(!validDate(birth)||!validDate(date))return null;let a=Number(date.slice(0,4))-Number(birth.slice(0,4));if(date.slice(5)<birth.slice(5))a--;return a>=0?a:null;}
@@ -38,14 +40,16 @@
     for(const r of db.records){let key=r.player+':'+r.period;if(!ids.has(r.player)||!ps.has(r.period)||!str(r.raw,100)||!Number.isInteger(r.fill)||!Object.hasOwn(db.palette,String(r.fill))||keys.has(key)||(r.role!==undefined&&!['','holder','challenger'].includes(r.role))||(r.recordEvent!==undefined&&!EVENTS.includes(r.recordEvent))||(r.className!==undefined&&!str(r.className,100)))fail();keys.add(key);}
     if(db.ryuo!==undefined){
       if(!db.ryuo||!Array.isArray(db.ryuo.periods)||!Array.isArray(db.ryuo.records)||db.ryuo.periods.length>1000||db.ryuo.records.length>300000)fail();
+      if(db.ryuo.resultMode!==undefined&&!['yellow-loss','legacy-challenger'].includes(db.ryuo.resultMode))fail();
       const rp=new Set(),anchors=new Set(),rk=new Set();
       for(const p of db.ryuo.periods){const anchor=db.periods.find(j=>j.id===p.junniPeriod);if(!Number.isInteger(p.id)||p.id<1||rp.has(p.id)||anchors.has(p.junniPeriod)||!anchor||p.ageAt!==anchor.ageAt||typeof p.ongoing!=='boolean'||!str(p.note))fail();rp.add(p.id);anchors.add(p.junniPeriod);}
-      for(const r of db.ryuo.records){const key=r.player+':'+r.period;if(r.competition!=='ryuo'||!ids.has(r.player)||!rp.has(r.period)||rk.has(key)||!str(r.raw,100)||!Number.isInteger(r.fill)||!Object.hasOwn(db.palette,String(r.fill))||typeof r.qualified!=='boolean'||typeof r.groupWinner!=='boolean'||typeof r.challenger!=='boolean'||(r.recordEvent!==undefined&&!EVENTS.includes(r.recordEvent))||(r.className!==undefined&&!str(r.className,100)))fail();rk.add(key);}
+      for(const r of db.ryuo.records){const key=r.player+':'+r.period;if(r.competition!=='ryuo'||!ids.has(r.player)||!rp.has(r.period)||rk.has(key)||!str(r.raw,100)||!Number.isInteger(r.fill)||!Object.hasOwn(db.palette,String(r.fill))||typeof r.qualified!=='boolean'||typeof r.groupWinner!=='boolean'||typeof r.challenger!=='boolean'||(db.ryuo.resultMode==='yellow-loss'&&typeof r.loss!=='boolean')||(r.recordEvent!==undefined&&!EVENTS.includes(r.recordEvent))||(r.className!==undefined&&!str(r.className,100)))fail();rk.add(key);}
     }
     return db;
   }
   function mergeRyuo(current,incoming){
     validate(current);validate(incoming);if(!incoming.ryuo)throw new Error('竜王戦の追加データがありません。');
+    if(current.ryuo&&(current.ryuo.resultMode||'legacy-challenger')!==(incoming.ryuo.resultMode||'legacy-challenger'))throw new Error('竜王戦の資料形式が異なります。差し替え用JSONを使用してください。');
     if(!current.source?.sha256||current.source.sha256!==incoming.source?.sha256)throw new Error('取り込み元の棋士データが一致しません。現在のデータは変更していません。');
     const next=JSON.parse(JSON.stringify(current)),known=new Map(next.players.map(p=>[p.id,p]));
     const incomingPlayers=new Map(incoming.players.map(p=>[p.id,p]));
@@ -58,6 +62,15 @@
     for(const r of incoming.ryuo.records){const key=r.player+':'+r.period;if(keys.has(key)){kept++;continue;}next.ryuo.records.push(JSON.parse(JSON.stringify(r)));keys.add(key);added++;}
     delete next.delivery;validate(next);return {data:next,added,kept};
   }
-  const api={EVENTS,LABELS,CLASS_COLORS,RYUO_COLORS,validDate,ageAt,event,sourceEvent,displayClass,classColor,titleStats,result,describe,matchesEvent,index,validate,mergeRyuo};
+  function replaceRyuo(current,incoming){
+    validate(current);validate(incoming);
+    if(incoming.ryuo?.resultMode!=='yellow-loss'||incoming.ryuo?.source?.sheet!=='竜王戦')throw new Error('竜王戦シートを元にした差し替えデータではありません。');
+    if(!current.source?.sha256||current.source.sha256!==incoming.source?.sha256)throw new Error('取り込み元の棋士データが一致しません。現在のデータは変更していません。');
+    const next=JSON.parse(JSON.stringify(current)),known=new Set(next.players.map(p=>p.id)),people=new Map(incoming.players.map(p=>[p.id,p]));
+    for(const r of incoming.ryuo.records)if(!known.has(r.player)){next.players.push(JSON.parse(JSON.stringify(people.get(r.player))));known.add(r.player);}
+    const replaced=next.ryuo?.records.length||0;next.ryuo=JSON.parse(JSON.stringify(incoming.ryuo));
+    delete next.delivery;validate(next);return {data:next,replaced,loaded:next.ryuo.records.length};
+  }
+  const api={EVENTS,LABELS,CLASS_COLORS,RYUO_COLORS,validDate,ageAt,event,sourceEvent,displayClass,classColor,titleStats,result,describe,matchesEvent,index,validate,mergeRyuo,replaceRyuo};
   root.KishiCore=api;if(typeof module!=='undefined')module.exports=api;
 })(typeof window!=='undefined'?window:globalThis);
