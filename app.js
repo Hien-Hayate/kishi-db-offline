@@ -1,4 +1,4 @@
-/* Stage19-3B. No network services, account, or external library is required. */
+/* Stage19-3C. No network services, account, or external library is required. */
 (function(){
   'use strict';
   const C=window.KishiCore, KEY='banjo-kishi-db-v1', $=id=>document.getElementById(id);
@@ -66,7 +66,7 @@
     h+='</div>';
     if(rs.length)h+='<div class="ribbon" aria-label="クラス推移">'+years().filter(t=>parts(t).some(part=>get(p.id,part.meta.id,part.competition))).map(t=>'<div class="ribbon-item">'+parts(t).map(part=>{const r=get(p.id,part.meta.id,part.competition);return '<span>'+ (part.competition==='ryuo'?'竜':'順')+part.meta.id+'期</span><button data-scroll="'+t.id+'" style="'+(color(r)?'background:'+color(r):'')+'" aria-label="'+esc(compName(part.competition))+'第'+part.meta.id+'期の行へ">'+(esc(C.classLabel(db,r))||'&nbsp;')+'</button>';}).join('')+'</div>').join('')+'</div>';
     const withTitles=!!db.titles;
-    const titleCell=(entries,rowspan=1)=>'<td class="annual-titles"'+(rowspan>1?' rowspan="'+rowspan+'"':'')+'>'+(entries.length?'<span class="annual-titles-label">タイトル戦（名人戦年度）</span>':'')+entries.map(e=>'<div class="annual-title-entry">'+esc(C.titleLine(e,p.id))+'</div>').join('')+'</td>';
+    const titleCell=(entries,rowspan=1)=>'<td class="annual-titles"'+(rowspan>1?' rowspan="'+rowspan+'"':'')+'>'+(entries.length?'<span class="annual-titles-label">タイトル戦</span>':'')+entries.map(e=>{const line=C.titleLine(e,p.id),split=line.lastIndexOf(' ');return '<div class="annual-title-entry"><span class="annual-title-name">'+esc(line.slice(0,split))+'</span> <span class="annual-title-result">'+esc(line.slice(split+1))+'</span></div>';}).join('')+'</td>';
     if(withTitles)h+='<p class="timeline-note">タイトル戦は名人戦年度で対応させ、各期の確定順に表示します。対応する棋戦の期がない年度は補足行です。</p>';
     h+='<div class="table-wrap timeline-wrap"><table class="player-timeline" role="table"><thead><tr><th>棋戦・期</th><th>年度末年齢</th><th>所属</th><th>記録</th>'+(withTitles?'<th class="annual-titles">タイトル戦（名人戦年度）</th>':'')+'</tr></thead>';
     for(const row of C.playerTimeline(db,p.id,ui.competition).reverse()){
@@ -228,7 +228,7 @@
   function editPeriod(id){const ps=parts(idx.periods.get(id));
     openModal('開催状況の設定',ps.map(p=>'<label>'+esc(compName(p.competition))+' 第'+p.meta.id+'期<select id="'+(p.competition==='ryuo'?'ryuoOngoing':'ongoing')+'">'+options([['yes','進行中'],['no','終了']],p.meta.ongoing?'yes':'no')+'</select></label>').join(''),()=>{const next=clone(db);for(const p of ps){const t=(p.competition==='ryuo'?next.ryuo.periods:next.periods).find(x=>x.id===p.meta.id);t.ongoing=$(p.competition==='ryuo'?'ryuoOngoing':'ongoing').value==='yes';}commit(next);});
   }
-  function backup(prefix='backup'){const json=db?JSON.stringify(db,null,2):(storedRevision||'null'),blob=new Blob([json],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='banjo_kishi_stage19_3b_'+prefix+'_'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}
+  function backup(prefix='backup'){const json=db?JSON.stringify(db,null,2):(storedRevision||'null'),blob=new Blob([json],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='banjo_kishi_stage19_3c_'+prefix+'_'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}
   function manage(){
     if(!db){openModal('データの読み込み','<p class="dialog-note">初期データJSONまたはバックアップを選んで、この端末へ読み込みます。</p><button type="button" id="chooseData">データファイルを選ぶ</button>',null);$('chooseData').onclick=()=>$('importInput').click();return;}
     openModal('データ管理','<p class="dialog-note">変更はこの端末・このブラウザに保存します。別端末へ移すときやアプリを置き換える前に、JSONバックアップを保存してください。</p><div class="management"><button type="button" id="exportButton">JSONバックアップを保存</button><button type="button" id="importButton">JSONを読み込む（追加・復元）</button><button type="button" id="phaseButton">第'+ui.period+'期の開催状況</button><button type="button" id="updateButton">アプリの更新を確認</button></div><p class="dialog-note">読み込み元：'+esc(db.source?.filename||'JSONバックアップ')+'<br>竜王戦の元資料：'+esc(db.ryuo?((db.ryuo.source?.filename||'')+' / '+(db.ryuo.source?.sheet||'')):'未追加')+'<br>タイトル戦の元資料：'+esc(db.titles?((db.titles.source?.filename||'')+' / '+(db.titles.source?.sheet||'')):'未追加')+'<br>取り込み範囲：順位戦、順位2の生年月日、竜王戦、棋戦。Excelの直接読み込みはこの試作には含みません。</p>',null);
