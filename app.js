@@ -1,4 +1,4 @@
-/* Stage19-3A. No network services, account, or external library is required. */
+/* Stage19-3B. No network services, account, or external library is required. */
 (function(){
   'use strict';
   const C=window.KishiCore, KEY='banjo-kishi-db-v1', $=id=>document.getElementById(id);
@@ -66,21 +66,24 @@
     h+='</div>';
     if(rs.length)h+='<div class="ribbon" aria-label="クラス推移">'+years().filter(t=>parts(t).some(part=>get(p.id,part.meta.id,part.competition))).map(t=>'<div class="ribbon-item">'+parts(t).map(part=>{const r=get(p.id,part.meta.id,part.competition);return '<span>'+ (part.competition==='ryuo'?'竜':'順')+part.meta.id+'期</span><button data-scroll="'+t.id+'" style="'+(color(r)?'background:'+color(r):'')+'" aria-label="'+esc(compName(part.competition))+'第'+part.meta.id+'期の行へ">'+(esc(C.classLabel(db,r))||'&nbsp;')+'</button>';}).join('')+'</div>').join('')+'</div>';
     const withTitles=!!db.titles;
-    const titleCell=(entries,rowspan=1)=>'<td class="annual-titles"'+(rowspan>1?' rowspan="'+rowspan+'"':'')+'>'+entries.map(e=>'<div class="annual-title-entry">'+esc(C.titleLine(e,p.id))+'</div>').join('')+'</td>';
+    const titleCell=(entries,rowspan=1)=>'<td class="annual-titles"'+(rowspan>1?' rowspan="'+rowspan+'"':'')+'>'+(entries.length?'<span class="annual-titles-label">タイトル戦（名人戦年度）</span>':'')+entries.map(e=>'<div class="annual-title-entry">'+esc(C.titleLine(e,p.id))+'</div>').join('')+'</td>';
     if(withTitles)h+='<p class="timeline-note">タイトル戦は名人戦年度で対応させ、各期の確定順に表示します。対応する棋戦の期がない年度は補足行です。</p>';
-    h+='<div class="table-wrap"><table class="player-timeline"><thead><tr><th>棋戦・期</th><th>年度末年齢</th><th>所属</th><th>記録</th>'+(withTitles?'<th class="annual-titles">タイトル戦（名人戦年度）</th>':'')+'</tr></thead><tbody>';
+    h+='<div class="table-wrap timeline-wrap"><table class="player-timeline" role="table"><thead><tr><th>棋戦・期</th><th>年度末年齢</th><th>所属</th><th>記録</th>'+(withTitles?'<th class="annual-titles">タイトル戦（名人戦年度）</th>':'')+'</tr></thead>';
     for(const row of C.playerTimeline(db,p.id,ui.competition).reverse()){
       const t=row.period;
       if(!t){
-        h+='<tr id="title-year-'+row.meijinYear+'" class="supplementary-year"><td>名人戦年度 '+row.meijinYear+'<span class="sub">補足'+(row.meijinYear===1977?'（第30期と第36期の間）':'')+'</span></td><td></td><td></td><td class="event">タイトル戦のみ</td>'+titleCell(row.titles)+'</tr>';
+        h+='<tbody class="timeline-year supplementary-block"><tr id="title-year-'+row.meijinYear+'" class="supplementary-year"><td class="timeline-period">名人戦年度 '+row.meijinYear+'<span class="sub">補足'+(row.meijinYear===1977?'（第30期と第36期の間）':'')+'</span></td><td class="timeline-empty"></td><td class="timeline-empty"></td><td class="event timeline-result">タイトル戦のみ</td>'+titleCell(row.titles)+'</tr></tbody>';
         continue;
       }
       const ps=parts(t);if(!ui.blank&&!ps.some(part=>get(p.id,part.meta.id,part.competition))&&!row.titles.length)continue;
+      h+='<tbody id="timeline-year-'+t.id+'" class="timeline-year'+(ps.length>1?' paired':'')+'">';
       ps.forEach((part,i)=>{const r=get(p.id,part.meta.id,part.competition),age=C.ageAt(p.birth,part.meta.ageAt);
-        h+='<tr'+(i===0?' id="period-row-'+t.id+'"':'')+'><td><button class="period-link" data-season="'+t.id+'">'+esc(compName(part.competition))+' '+part.meta.id+'期</button><span class="sub">基準 '+esc(part.meta.ageAt)+'</span>'+(withTitles&&i===0?'<span class="sub">名人戦年度 '+row.meijinYear+'</span>':'')+'</td>'+(i===0?'<td rowspan="'+ps.length+'">'+esc(age===null?'不明':age+'歳')+'</td>':'')+'<td>'+recordButton(p.id,part.meta.id,r,part.competition)+'</td><td class="event">'+esc(r?C.describe(db,r):'')+'</td>'+(withTitles&&i===0?titleCell(row.titles,ps.length):'')+'</tr>';
+        const description=r?C.describe(db,r):'';
+        h+='<tr class="timeline-part-'+i+'"'+(i===0?' id="period-row-'+t.id+'"':'')+'><td class="timeline-period"><button class="period-link" data-season="'+t.id+'">'+esc(compName(part.competition))+' '+part.meta.id+'期</button><span class="sub">基準 '+esc(part.meta.ageAt)+'</span>'+(withTitles&&i===0?'<span class="sub">名人戦年度 '+row.meijinYear+'</span>':'')+'</td>'+(i===0?'<td class="timeline-age" rowspan="'+ps.length+'">'+esc(age===null?'不明':age+'歳')+'</td>':'')+'<td class="timeline-class">'+recordButton(p.id,part.meta.id,r,part.competition)+'</td><td class="event timeline-result">'+(description?'<span class="timeline-result-label">'+esc(compName(part.competition))+'の記録</span>':'')+esc(description)+'</td>'+(withTitles&&i===0?titleCell(row.titles,ps.length):'')+'</tr>';
       });
+      h+='</tbody>';
     }
-    h+='</tbody></table>'+(rs.length||C.titleHistory(db,p.id).length?'':'<p class="empty">記録はありません。空白の期を表示して記録を追加できます。</p>')+'</div></article></div>';return h;
+    h+='</table>'+(rs.length||C.titleHistory(db,p.id).length?'':'<p class="empty">記録はありません。空白の期を表示して記録を追加できます。</p>')+'</div></article></div>';return h;
   }
   function renderSeason(){
     const t=idx.periods.get(ui.period);
@@ -156,7 +159,7 @@
     $('content').querySelectorAll('[data-player],[data-open-player]').forEach(b=>b.addEventListener('click',()=>{ui.selected=b.dataset.player||b.dataset.openPlayer;ui.view='player';if(b.dataset.openPlayer){ui.query='';ui.rosterTop=0;}render();rememberList();}));
     $('content').querySelectorAll('[data-season]').forEach(b=>b.addEventListener('click',()=>{ui.period=Number(b.dataset.season);ui.view='season';render();}));
     $('content').querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click',()=>editRecord(b.dataset.edit,Number(b.dataset.period),b.dataset.competition||'junni')));
-    $('content').querySelectorAll('[data-scroll]').forEach(b=>b.addEventListener('click',()=>{const row=$('period-row-'+b.dataset.scroll);row?.scrollIntoView({behavior:'smooth',block:'center'});}));
+    $('content').querySelectorAll('[data-scroll]').forEach(b=>b.addEventListener('click',()=>{const row=$('timeline-year-'+b.dataset.scroll)||$('period-row-'+b.dataset.scroll);row?.scrollIntoView({behavior:'smooth',block:'center'});}));
     $('content').querySelectorAll('[data-remove]').forEach(b=>b.addEventListener('click',()=>{ui.compare=ui.compare.filter(id=>id!==b.dataset.remove);renderContent();}));
   }
   function render(){
@@ -225,7 +228,7 @@
   function editPeriod(id){const ps=parts(idx.periods.get(id));
     openModal('開催状況の設定',ps.map(p=>'<label>'+esc(compName(p.competition))+' 第'+p.meta.id+'期<select id="'+(p.competition==='ryuo'?'ryuoOngoing':'ongoing')+'">'+options([['yes','進行中'],['no','終了']],p.meta.ongoing?'yes':'no')+'</select></label>').join(''),()=>{const next=clone(db);for(const p of ps){const t=(p.competition==='ryuo'?next.ryuo.periods:next.periods).find(x=>x.id===p.meta.id);t.ongoing=$(p.competition==='ryuo'?'ryuoOngoing':'ongoing').value==='yes';}commit(next);});
   }
-  function backup(prefix='backup'){const json=db?JSON.stringify(db,null,2):(storedRevision||'null'),blob=new Blob([json],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='banjo_kishi_stage19_3a_'+prefix+'_'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}
+  function backup(prefix='backup'){const json=db?JSON.stringify(db,null,2):(storedRevision||'null'),blob=new Blob([json],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='banjo_kishi_stage19_3b_'+prefix+'_'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}
   function manage(){
     if(!db){openModal('データの読み込み','<p class="dialog-note">初期データJSONまたはバックアップを選んで、この端末へ読み込みます。</p><button type="button" id="chooseData">データファイルを選ぶ</button>',null);$('chooseData').onclick=()=>$('importInput').click();return;}
     openModal('データ管理','<p class="dialog-note">変更はこの端末・このブラウザに保存します。別端末へ移すときやアプリを置き換える前に、JSONバックアップを保存してください。</p><div class="management"><button type="button" id="exportButton">JSONバックアップを保存</button><button type="button" id="importButton">JSONを読み込む（追加・復元）</button><button type="button" id="phaseButton">第'+ui.period+'期の開催状況</button><button type="button" id="updateButton">アプリの更新を確認</button></div><p class="dialog-note">読み込み元：'+esc(db.source?.filename||'JSONバックアップ')+'<br>竜王戦の元資料：'+esc(db.ryuo?((db.ryuo.source?.filename||'')+' / '+(db.ryuo.source?.sheet||'')):'未追加')+'<br>タイトル戦の元資料：'+esc(db.titles?((db.titles.source?.filename||'')+' / '+(db.titles.source?.sheet||'')):'未追加')+'<br>取り込み範囲：順位戦、順位2の生年月日、竜王戦、棋戦。Excelの直接読み込みはこの試作には含みません。</p>',null);
