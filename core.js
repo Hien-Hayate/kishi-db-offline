@@ -11,6 +11,19 @@
   const classLabel=(db,r)=>classText(displayClass(db,r));
   function titleHistory(db,player){return (db.titles?.events||[]).filter(e=>!player||e.participants.some(p=>p.player===player)).slice().sort((a,b)=>a.order-b.order);}
   function titleTotals(db,player){const all=titleHistory(db,player);return {appearances:all.length,wins:all.reduce((n,e)=>n+Number(e.participants.some(p=>p.player===player&&titleWon(p.code))),0)};}
+  function titleLine(entry,player){const p=entry.participants.find(p=>p.player===player);return p?'第'+entry.period+'期'+entry.title+(entry.title.endsWith('戦')?'':'戦')+' '+TITLE_LABELS[p.code]:'';}
+  function playerTimeline(db,player,competition='junni'){
+    const byYear=new Map();
+    for(const e of titleHistory(db,player)){if(!byYear.has(e.meijinYear))byYear.set(e.meijinYear,[]);byYear.get(e.meijinYear).push(e);}
+    const allowed=new Set((db.ryuo?.periods||[]).map(p=>p.junniPeriod)),rows=[];
+    for(const period of db.periods){
+      if(competition==='ryuo'&&!allowed.has(period.id))continue;
+      rows.push({period,meijinYear:period.meijinYear,titles:byYear.get(period.meijinYear)||[]});byYear.delete(period.meijinYear);
+    }
+    // These are display rows only, never synthetic competition periods or player records.
+    for(const [meijinYear,titles] of byYear)rows.push({period:null,meijinYear,titles});
+    return rows.sort((a,b)=>a.meijinYear-b.meijinYear);
+  }
   // Normal class fills in 順位2, excluding result highlights. B/C remain distinct labels.
   const CLASS_COLORS={'名':'#ffd966','A':'#f4b183','B':'#f8cbad','B1':'#f8cbad','B2':'#fce4d6','C':'#dae3f3','C1':'#dae3f3','C2':'#b4c7e7','宣言':'#e2efda','陥編':'#c6e0b4'};
   const RYUO_COLORS={'竜':'#ffd966','1組':'#f4b183','2組':'#f8cbad','3組':'#fce4d6','4組':'#dae3f3','5組':'#b4c7e7','6組':'#8faadc','シ':'#ede4d1'};
@@ -102,6 +115,6 @@
     for(const e of incoming.titles.events){if(ids.has(e.id)||pairs.has(e.title+':'+e.period)){kept++;continue;}if(orders.has(e.order))throw new Error('タイトル戦の確定順が既存記録と重なっています。現在のデータは変更していません。');next.titles.events.push(JSON.parse(JSON.stringify(e)));ids.add(e.id);pairs.add(e.title+':'+e.period);orders.add(e.order);added++;}
     delete next.delivery;validate(next);return {data:next,added,kept};
   }
-  const api={EVENTS,LABELS,CLASS_COLORS,RYUO_COLORS,TITLE_LABELS,titleWon,titleHistory,titleTotals,classText,classLabel,validDate,ageAt,event,sourceEvent,displayClass,classColor,titleStats,result,describe,matchesEvent,index,validate,mergeRyuo,replaceRyuo,mergeTitles};
+  const api={EVENTS,LABELS,CLASS_COLORS,RYUO_COLORS,TITLE_LABELS,titleWon,titleHistory,titleTotals,titleLine,playerTimeline,classText,classLabel,validDate,ageAt,event,sourceEvent,displayClass,classColor,titleStats,result,describe,matchesEvent,index,validate,mergeRyuo,replaceRyuo,mergeTitles};
   root.KishiCore=api;if(typeof module!=='undefined')module.exports=api;
 })(typeof window!=='undefined'?window:globalThis);
