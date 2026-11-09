@@ -1,4 +1,4 @@
-/* Stage19-3E. No network services, account, or external library is required. */
+/* Stage19-3F. No network services, account, or external library is required. */
 (function(){
   'use strict';
   const C=window.KishiCore, KEY='banjo-kishi-db-v1', $=id=>document.getElementById(id);
@@ -61,8 +61,17 @@
     if(!list.length)return h+'<div class="profile empty">棋士名を変えて検索してください。</div></div>';
     const rs=forPlayer(p.id),birth=p.birth||'不明';
     h+='<article class="profile"><div class="profile-header"><div><p class="eyebrow">'+esc(p.number?'棋士番号 '+p.number:'棋士別記録')+'</p><h2>'+esc(p.name)+'</h2><div class="profile-meta">生年月日 '+esc(birth)+'<br>四段昇段年 '+esc(p.proYear||'不明')+'</div>'+(db.titles?'<button id="openTitleHistory" class="link">タイトル戦履歴</button>':'')+'</div><button id="editProfile">棋士情報編集</button></div>';
-    h+='<div class="summary"><div><strong>'+rs.length+'件</strong><small>収録された記録数</small></div>';
-    for(const c of ['junni','ryuo']){if(ui.competition!=='both'&&ui.competition!==c)continue;if(c==='ryuo'&&!db.ryuo){h+='<div><strong>未追加</strong><small>竜王戦データ</small></div>';continue;}const stats=C.titleStats(db,rs.filter(x=>x.competition===c).map(x=>x.r)),title=c==='ryuo'?'竜王':'名人';h+='<div><strong>'+stats.appearances+'回</strong><small>'+title+'戦登場</small></div><div><strong>'+stats.wins+'回</strong><small>'+title+'獲得</small></div>';}
+    const summaryPair=(key,appearances,wins,appearanceLabel,winLabel)=>'<div class="summary-group" data-summary="'+key+'"><div><strong>'+appearances+'回</strong><small>'+appearanceLabel+'</small></div><div><strong>'+wins+'期</strong><small>'+winLabel+'</small></div></div>';
+    const unavailable=(key,label)=>'<div class="summary-group" data-summary="'+key+'"><div class="summary-unavailable"><strong>未追加</strong><small>'+label+'</small></div></div>';
+    h+='<div class="summary player-summary"><div class="summary-total"><strong>'+rs.length+'件</strong><small>収録された記録数</small></div>';
+    for(const c of ['junni','ryuo']){
+      if(ui.competition!=='both'&&ui.competition!==c)continue;
+      if(c==='ryuo'&&!db.ryuo){h+=unavailable('ryuo','竜王戦データ');continue;}
+      const stats=C.titleStats(db,rs.filter(x=>x.competition===c).map(x=>x.r)),title=c==='ryuo'?'竜王':'名人';
+      h+=summaryPair(c,stats.appearances,stats.wins,title+'戦登場',title+'獲得');
+    }
+    if(db.titles){const stats=C.titleTotals(db,p.id);h+=summaryPair('titles',stats.appearances,stats.wins,'タイトル戦登場','タイトル獲得');h+='<p class="summary-note">全タイトル戦の集計は「タイトル戦」データから算出。獲得数は防衛・留位を含みます。</p>';}
+    else h+=unavailable('titles','全タイトル戦データ');
     h+='</div>';
     if(rs.length)h+='<div class="ribbon" aria-label="クラス推移">'+years().filter(t=>parts(t).some(part=>get(p.id,part.meta.id,part.competition))).map(t=>'<div class="ribbon-item">'+parts(t).map(part=>{const r=get(p.id,part.meta.id,part.competition);return '<span>'+ (part.competition==='ryuo'?'竜':'順')+part.meta.id+'期</span><button data-scroll="'+t.id+'" style="'+(color(r)?'background:'+color(r):'')+'" aria-label="'+esc(compName(part.competition))+'第'+part.meta.id+'期の行へ">'+(esc(C.classLabel(db,r))||'&nbsp;')+'</button>';}).join('')+'</div>').join('')+'</div>';
     const withTitles=!!db.titles;
@@ -231,7 +240,7 @@
   function editPeriod(id){const ps=parts(idx.periods.get(id));
     openModal('開催状況の設定',ps.map(p=>'<label>'+esc(compName(p.competition))+' 第'+p.meta.id+'期<select id="'+(p.competition==='ryuo'?'ryuoOngoing':'ongoing')+'">'+options([['yes','進行中'],['no','終了']],p.meta.ongoing?'yes':'no')+'</select></label>').join(''),()=>{const next=clone(db);for(const p of ps){const t=(p.competition==='ryuo'?next.ryuo.periods:next.periods).find(x=>x.id===p.meta.id);t.ongoing=$(p.competition==='ryuo'?'ryuoOngoing':'ongoing').value==='yes';}commit(next);});
   }
-  function backup(prefix='backup'){const json=db?JSON.stringify(db,null,2):(storedRevision||'null'),blob=new Blob([json],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='banjo_kishi_stage19_3e_'+prefix+'_'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}
+  function backup(prefix='backup'){const json=db?JSON.stringify(db,null,2):(storedRevision||'null'),blob=new Blob([json],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='banjo_kishi_stage19_3f_'+prefix+'_'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}
   function manage(){
     if(!db){openModal('データの読み込み','<p class="dialog-note">初期データJSONまたはバックアップを選んで、この端末へ読み込みます。</p><button type="button" id="chooseData">データファイルを選ぶ</button>',null);$('chooseData').onclick=()=>$('importInput').click();return;}
     openModal('データ管理','<p class="dialog-note">変更はこの端末・このブラウザに保存します。別端末へ移すときやアプリを置き換える前に、JSONバックアップを保存してください。</p><div class="management"><button type="button" id="exportButton">JSONバックアップを保存</button><button type="button" id="importButton">JSONを読み込む（追加・復元）</button><button type="button" id="phaseButton">第'+ui.period+'期の開催状況</button><button type="button" id="updateButton">アプリの更新を確認</button></div><p class="dialog-note">読み込み元：'+esc(db.source?.filename||'JSONバックアップ')+'<br>竜王戦の元資料：'+esc(db.ryuo?((db.ryuo.source?.filename||'')+' / '+(db.ryuo.source?.sheet||'')):'未追加')+'<br>タイトル戦の元資料：'+esc(db.titles?((db.titles.source?.filename||'')+' / '+(db.titles.source?.sheet||'')):'未追加')+'<br>取り込み範囲：順位戦、順位2の生年月日、竜王戦、棋戦。Excelの直接読み込みはこの試作には含みません。</p>',null);
