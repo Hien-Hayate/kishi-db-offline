@@ -9,6 +9,8 @@
   const classKey=s=>s==='名人'?'名':s==='竜王'?'竜':s;
   const classText=s=>s==='名'?'名人':s==='竜'?'竜王':s;
   const classLabel=(db,r)=>classText(displayClass(db,r));
+  function isRyuoMemo(r){return !!r&&r.competition==='ryuo'&&(r.className==='R'||(r.raw==='R'&&(r.className===undefined||r.className==='')));}
+  function isBlankRyuoMemo(db,r){return isRyuoMemo(r)&&!r.qualified&&!r.groupWinner&&!r.challenger&&!r.loss&&!event(db,r);}
   function titleHistory(db,player){return (db.titles?.events||[]).filter(e=>!player||e.participants.some(p=>p.player===player)).slice().sort((a,b)=>a.order-b.order);}
   function titleTotals(db,player){const all=titleHistory(db,player);return {appearances:all.length,wins:all.reduce((n,e)=>n+Number(e.participants.some(p=>p.player===player&&titleWon(p.code))),0)};}
   function titleLine(entry,player){const p=entry.participants.find(p=>p.player===player);return p?'第'+entry.period+'期'+entry.title+(entry.title.endsWith('戦')?'':'戦')+' '+TITLE_LABELS[p.code]:'';}
@@ -47,6 +49,7 @@
   function ryuoResult(db,r){
     if(!r)return '';const directLoss=db.ryuo?.resultMode==='yellow-loss';
     if(directLoss&&r.loss)return 'loss';
+    if(isRyuoMemo(r))return '';
     const next=ryuoMap(db).get(r.player+':'+(r.period+1));
     if(!next)return '';const nextClass=displayClass(db,next);if(!nextClass)return '';
     if(nextClass==='竜')return 'win';
@@ -56,7 +59,7 @@
   function ageAt(birth,date){if(!validDate(birth)||!validDate(date))return null;let a=Number(date.slice(0,4))-Number(birth.slice(0,4));if(date.slice(5)<birth.slice(5))a--;return a>=0?a:null;}
   function sourceEvent(db,r){return r?(db.palette[String(r.fill)]?.event??'unknown'):'';}
   function event(db,r){if(!r)return '';if(r.recordEvent!==undefined)return r.recordEvent;if(r.competition==='ryuo')return ryuoResult(db,r);const e=sourceEvent(db,r);return ['demerit','declared','transferred'].includes(e)?'':e;}
-  function displayClass(db,r){if(!r)return '';if(r.className!==undefined)return classKey(r.className);if(r.competition==='ryuo')return /^[1-6]$/.test(r.raw)?r.raw+'組':classKey(r.raw);const e=sourceEvent(db,r);if(e==='declared')return '宣言';if(e==='transferred')return '陥編';return classKey(r.raw);}
+  function displayClass(db,r){if(!r)return '';if(isRyuoMemo(r))return '';if(r.className!==undefined)return classKey(r.className);if(r.competition==='ryuo')return /^[1-6]$/.test(r.raw)?r.raw+'組':classKey(r.raw);const e=sourceEvent(db,r);if(e==='declared')return '宣言';if(e==='transferred')return '陥編';return classKey(r.raw);}
   function classColor(db,r){return (r?.competition==='ryuo'?RYUO_COLORS:CLASS_COLORS)[displayClass(db,r)]||'';}
   function titleStats(db,records){let appearances=0,wins=0;for(const r of records){const e=event(db,r);if(e==='win'){wins++;appearances++;}else if(e==='loss')appearances++;}return {appearances,wins};}
   function result(db,r){const e=event(db,r);if(r?.competition==='ryuo')return LABELS[e]||'';if(e==='win')return r.role==='holder'?'名人防衛':r.role==='challenger'?'名人獲得':'七番勝負勝利';if(e==='loss')return r.role==='holder'?'防衛失敗':r.role==='challenger'?'獲得ならず':'七番勝負敗退';return LABELS[e]||'';}
@@ -130,6 +133,6 @@
     for(const e of incoming.titles.events){if(ids.has(e.id)||pairs.has(e.title+':'+e.period)){kept++;continue;}if(orders.has(e.order))throw new Error('タイトル戦の確定順が既存記録と重なっています。現在のデータは変更していません。');next.titles.events.push(JSON.parse(JSON.stringify(e)));ids.add(e.id);pairs.add(e.title+':'+e.period);orders.add(e.order);added++;}
     delete next.delivery;validate(next);return {data:next,added,kept};
   }
-  const api={EVENTS,LABELS,CLASS_COLORS,RYUO_COLORS,TITLE_LABELS,titleWon,titleHistory,titleTotals,titleLine,playerTimeline,classText,classLabel,validDate,ageAt,event,sourceEvent,displayClass,classColor,titleStats,result,describe,matchesEvent,index,validate,mergeRyuo,replaceRyuo,mergeTitles};
+  const api={EVENTS,LABELS,CLASS_COLORS,RYUO_COLORS,TITLE_LABELS,titleWon,titleHistory,titleTotals,titleLine,playerTimeline,classText,classLabel,isRyuoMemo,isBlankRyuoMemo,validDate,ageAt,event,sourceEvent,displayClass,classColor,titleStats,result,describe,matchesEvent,index,validate,mergeRyuo,replaceRyuo,mergeTitles};
   root.KishiCore=api;if(typeof module!=='undefined')module.exports=api;
 })(typeof window!=='undefined'?window:globalThis);

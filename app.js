@@ -1,4 +1,4 @@
-/* Stage19-3F. No network services, account, or external library is required. */
+/* Stage19-3G. No network services, account, or external library is required. */
 (function(){
   'use strict';
   const C=window.KishiCore, KEY='banjo-kishi-db-v1', $=id=>document.getElementById(id);
@@ -12,7 +12,8 @@
   const VIEW_KEY='banjo-kishi-view-v1';
   try{const v=JSON.parse(localStorage.getItem(VIEW_KEY)||'null');if(v&&db&&idx.players.has(v.selected)&&typeof v.query==='string'&&v.query.length<200&&Number.isFinite(v.top)&&v.top>=0){ui.selected=v.selected;ui.query=v.query;ui.rosterTop=v.top;if(['junni','ryuo','both'].includes(v.competition))ui.competition=v.competition;}}catch(e){}
   function rememberList(){try{localStorage.setItem(VIEW_KEY,JSON.stringify({selected:ui.selected,query:ui.query,top:ui.rosterTop,competition:ui.competition}));}catch(e){}}
-  const get=(id,p,competition='junni')=>(competition==='ryuo'?idx.ryuoRecords:idx.records).get(id+':'+p);
+  const getStored=(id,p,competition='junni')=>(competition==='ryuo'?idx.ryuoRecords:idx.records).get(id+':'+p);
+  const get=(id,p,competition='junni')=>{const r=getStored(id,p,competition);return C.isBlankRyuoMemo(db,r)?undefined:r;};
   const compName=c=>c==='ryuo'?'竜王戦':'順位戦';
   function parts(t){const out=[];if(ui.competition!=='ryuo')out.push({competition:'junni',meta:t});if(ui.competition!=='junni'){const m=(db.ryuo?.periods||[]).find(p=>p.junniPeriod===t.id);if(m)out.push({competition:'ryuo',meta:m});}return out;}
   function years(){return db.periods.filter(t=>parts(t).length);}
@@ -208,7 +209,7 @@
     $('modal').close();render();notice(message);
   }
   function editRecord(id,period,competition='junni'){
-    const ryuo=competition==='ryuo',directLoss=db.ryuo?.resultMode==='yellow-loss',p=idx.players.get(id),t=(ryuo?idx.ryuoPeriods:idx.periods).get(period),r=get(id,period,competition);
+    const ryuo=competition==='ryuo',directLoss=db.ryuo?.resultMode==='yellow-loss',p=idx.players.get(id),t=(ryuo?idx.ryuoPeriods:idx.periods).get(period),r=getStored(id,period,competition);
     const choices=ryuo?C.RYUO_COLORS:C.CLASS_COLORS;
     let body='<p class="dialog-note">'+esc(compName(competition))+'・年齢基準 '+esc(t.ageAt)+'。所属の色は自動で決まります。</p><div class="form-grid"><label>所属<input id="recordClass" maxlength="100" value="'+esc(C.classLabel(db,r))+'" list="classList"><datalist id="classList">'+Object.keys(choices).map(x=>'<option value="'+C.classText(x)+'"></option>').join('')+'</datalist></label><label>記録<select id="recordEvent">'+options([...(ryuo?[['auto','元データと次期の所属から自動判定']]:[]),['','なし'],...Object.entries(C.LABELS)],ryuo?(r?.recordEvent??'auto'):C.event(db,r))+'</select></label>';
     if(ryuo)body+='<label class="check wide"><input id="qualified" type="checkbox"'+(r?.qualified?' checked':'')+'>挑決</label><label class="check wide"><input id="groupWinner" type="checkbox"'+(r?.groupWinner?' checked':'')+'>組優勝</label>'+(directLoss?'<label class="check wide"><input id="sevenLoss" type="checkbox"'+(r?.loss?' checked':'')+'>七番勝負敗退（元シートの黄色）</label>':'<label class="check wide"><input id="challenger" type="checkbox"'+(r?.challenger?' checked':'')+'>竜王挑戦者（旧資料）</label>');
@@ -221,7 +222,7 @@
       if(ryuo){row.competition='ryuo';row.qualified=$('qualified').checked;row.groupWinner=$('groupWinner').checked;if(directLoss){row.loss=$('sevenLoss').checked;row.challenger=false;}else row.challenger=$('challenger').checked;}
       else {row.role=$('recordRole').value;if(row.role!==r?.role)row.roleSource='アプリ内編集';}
       if(selection==='auto')delete row.recordEvent;else row.recordEvent=selection;
-      if(!className&&!row.recordEvent&&!row.qualified&&!row.groupWinner&&!row.challenger&&!row.loss){if(at>=0)collection.splice(at,1);}else if(at>=0)collection[at]=row;else collection.push(row);
+      if(!className&&!row.recordEvent&&!row.qualified&&!row.groupWinner&&!row.challenger&&!row.loss){if(at>=0){if(ryuo&&r.raw==='R')collection[at]=row;else collection.splice(at,1);}}else if(at>=0)collection[at]=row;else collection.push(row);
       commit(next);
     });
   }
@@ -240,7 +241,7 @@
   function editPeriod(id){const ps=parts(idx.periods.get(id));
     openModal('開催状況の設定',ps.map(p=>'<label>'+esc(compName(p.competition))+' 第'+p.meta.id+'期<select id="'+(p.competition==='ryuo'?'ryuoOngoing':'ongoing')+'">'+options([['yes','進行中'],['no','終了']],p.meta.ongoing?'yes':'no')+'</select></label>').join(''),()=>{const next=clone(db);for(const p of ps){const t=(p.competition==='ryuo'?next.ryuo.periods:next.periods).find(x=>x.id===p.meta.id);t.ongoing=$(p.competition==='ryuo'?'ryuoOngoing':'ongoing').value==='yes';}commit(next);});
   }
-  function backup(prefix='backup'){const json=db?JSON.stringify(db,null,2):(storedRevision||'null'),blob=new Blob([json],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='banjo_kishi_stage19_3f_'+prefix+'_'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}
+  function backup(prefix='backup'){const json=db?JSON.stringify(db,null,2):(storedRevision||'null'),blob=new Blob([json],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='banjo_kishi_stage19_3g_'+prefix+'_'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}
   function manage(){
     if(!db){openModal('データの読み込み','<p class="dialog-note">初期データJSONまたはバックアップを選んで、この端末へ読み込みます。</p><button type="button" id="chooseData">データファイルを選ぶ</button>',null);$('chooseData').onclick=()=>$('importInput').click();return;}
     openModal('データ管理','<p class="dialog-note">変更はこの端末・このブラウザに保存します。別端末へ移すときやアプリを置き換える前に、JSONバックアップを保存してください。</p><div class="management"><button type="button" id="exportButton">JSONバックアップを保存</button><button type="button" id="importButton">JSONを読み込む（追加・復元）</button><button type="button" id="phaseButton">第'+ui.period+'期の開催状況</button><button type="button" id="updateButton">アプリの更新を確認</button></div><p class="dialog-note">読み込み元：'+esc(db.source?.filename||'JSONバックアップ')+'<br>竜王戦の元資料：'+esc(db.ryuo?((db.ryuo.source?.filename||'')+' / '+(db.ryuo.source?.sheet||'')):'未追加')+'<br>タイトル戦の元資料：'+esc(db.titles?((db.titles.source?.filename||'')+' / '+(db.titles.source?.sheet||'')):'未追加')+'<br>取り込み範囲：順位戦、順位2の生年月日、竜王戦、棋戦。Excelの直接読み込みはこの試作には含みません。</p>',null);
@@ -277,7 +278,7 @@
       $('preBackup').onclick=()=>backup('before_restore');
     }catch(err){if(!$('modal').open)openModal('読み込みエラー','<p class="dialog-note">'+esc(err.message)+'</p>',null);else showModalError(err.message);}
   });
-  function rules(){openModal('データの読み方','<ul><li>タイトル戦は「棋戦」シートの確定順を保持し、年度は名人戦年度です。棋士別年表は順位戦年度から翌春の名人戦までで区切り、名人戦以外は出典の年度を順位戦年度へ対応させます。名人戦は各順位戦期の対応する名人戦年度から配置し、年度の最後に表示します。第30期は第35期名人戦につながり、単純に同じ期数で対応させません。移行期の補足は1976年度・対応名人戦年度1977です。各棋戦の公式年度への読み替えと同年齢比較への追加は行いません。</li><li>タイトル戦の獲得数は「獲・防・奪・留」を合計します。「留」は留位として表示し獲得に含めます。登場数は元シートの記録件数で、留位を含み、実際の番勝負数とは区別します。</li><li>「挑」は挑戦敗退を表し、アプリでは「挑戦」と短縮表示します。「対」は意味未確認の元記号を保持します。棋士の人数は固定せず、初期名人戦の相手や挑戦者を作りません。色・永世称号資格の囲み罫線は取り込みません。</li><li>タイトル戦と順位戦・竜王戦の集計は各元資料ごとに独立して表示します。資料の収録範囲が異なっても相互に補完しません。</li><li>所属の色はクラス別に固定し、結果とは分けて表示します。</li><li>「宣言」「陥編」は所属に表示し、記録欄には重ねて表示しません。</li><li>名人戦登場は七番勝負の勝利と敗退の合計。名人獲得は防衛を含む七番勝負の勝利回数です。</li><li>名人・挑戦者の立場が確認された記録のみ「防衛」「獲得ならず」などに分けます。</li><li>昇級・降級・休場は記録欄に表示します。</li><li>初期のB・Cはそのまま表示。第30期の次は第36期で、欠番を生成しません。</li><li>年齢は順位戦年度末の3月31日時点。生年月日不明は不明のままです。</li><li>空白から引退確定日・引退日・翌年度の対局の有無を推定しません。</li></ul><p class="dialog-note">新資料「竜王戦」は太字が挑決、下線が組優勝、黄色が七番勝負敗退。勝利は次期の竜王から当期へ記録します。黄色の敗退指定は次期が空白でも有効です。旧資料は差し替え完了まで旧判定で読みます。竜王戦39期は順位戦84期と並べ、2026年3月31日を年齢基準とします。</p>',null);}
+  function rules(){openModal('データの読み方','<ul><li>タイトル戦は「棋戦」シートの確定順を保持し、年度は名人戦年度です。棋士別年表は順位戦年度から翌春の名人戦までで区切り、名人戦以外は出典の年度を順位戦年度へ対応させます。名人戦は各順位戦期の対応する名人戦年度から配置し、年度の最後に表示します。第30期は第35期名人戦につながり、単純に同じ期数で対応させません。移行期の補足は1976年度・対応名人戦年度1977です。各棋戦の公式年度への読み替えと同年齢比較への追加は行いません。</li><li>タイトル戦の獲得数は「獲・防・奪・留」を合計します。「留」は留位として表示し獲得に含めます。登場数は元シートの記録件数で、留位を含み、実際の番勝負数とは区別します。</li><li>「挑」は挑戦敗退を表し、アプリでは「挑戦」と短縮表示します。「対」は意味未確認の元記号を保持します。棋士の人数は固定せず、初期名人戦の相手や挑戦者を作りません。色・永世称号資格の囲み罫線は取り込みません。</li><li>タイトル戦と順位戦・竜王戦の集計は各元資料ごとに独立して表示します。資料の収録範囲が異なっても相互に補完しません。</li><li>所属の色はクラス別に固定し、結果とは分けて表示します。</li><li>「宣言」「陥編」は所属に表示し、記録欄には重ねて表示しません。</li><li>名人戦登場は七番勝負の勝利と敗退の合計。名人獲得は防衛を含む七番勝負の勝利回数です。</li><li>名人・挑戦者の立場が確認された記録のみ「防衛」「獲得ならず」などに分けます。</li><li>昇級・降級・休場は記録欄に表示します。</li><li>初期のB・Cはそのまま表示。第30期の次は第36期で、欠番を生成しません。</li><li>年齢は順位戦年度末の3月31日時点。生年月日不明は不明のままです。</li><li>空白から引退確定日・引退日・翌年度の対局の有無を推定しません。</li></ul><p class="dialog-note">竜王戦の「R」は引退のメモで、所属は空白として扱います。Rだけの記録は通常の年表・クラス推移・収録件数に含めません。元の記号は保存し、引退日は推定しません。新資料「竜王戦」は太字が挑決、下線が組優勝、黄色が七番勝負敗退。勝利は次期の竜王から当期へ記録します。黄色の敗退指定は次期が空白でも有効です。旧資料は差し替え完了まで旧判定で読みます。竜王戦39期は順位戦84期と並べ、2026年3月31日を年齢基準とします。</p>',null);}
   $('dataButton').onclick=manage;$('rulesButton').onclick=rules;$('closeModal').onclick=()=>$('modal').close();
   document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{ui.view=b.dataset.view;render();});
   render();if(storageIssue)notice(storageIssue);
