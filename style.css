@@ -53,3 +53,35 @@
 .player-summary .summary-unavailable{grid-column:1/-1}
 .player-summary .summary-note{flex-basis:100%;margin:0;font-size:.74rem;line-height:1.8;color:var(--muted)}
 @media(max-width:700px){.player-summary .summary-group{flex-basis:100%;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}}
+
+/* Class overview: year columns / player rows and a phone-width annual list. */
+.class-matrix-viewport,.class-annual-viewport{max-width:100%;height:65vh;height:65dvh;min-height:300px;overflow:auto;position:relative;isolation:isolate;overscroll-behavior:contain;overflow-anchor:none;scrollbar-width:thin}
+.class-matrix{table-layout:fixed;border-collapse:separate;border-spacing:0;line-height:1.25}
+.class-matrix th,.class-matrix td{width:84px;padding:7px 3px;border-right:1px solid #e9eae2;border-bottom:1px solid #e9eae2;vertical-align:middle;text-align:center}
+.class-matrix thead th{position:sticky;top:0;z-index:3;height:76px;padding:5px 2px;background:#f2f3ec}
+.class-matrix .class-name-corner,.class-matrix .class-row-name{width:120px;position:sticky;left:0;border-right:2px solid #c7cdbf}
+.class-matrix .class-name-corner{z-index:4}
+.class-matrix .class-row-name{z-index:2;background:var(--white);white-space:normal}
+.class-row-name button{width:100%;padding:4px;min-height:44px;border:0;background:none;font-size:.9rem;line-height:1.5;overflow-wrap:anywhere}
+.class-row-name small{display:block;font-size:.68rem;margin-top:3px}
+.class-matrix thead button{min-height:32px;width:100%;padding:3px 0;border:0;background:transparent;font-size:.76rem;text-decoration:underline;text-underline-offset:3px}
+.class-period-label{display:block;font-size:.64rem;line-height:16px;white-space:nowrap}
+.class-matrix thead .class-focus{background:#e2ebde;box-shadow:inset 0 3px #426954}
+.class-matrix .class-data-row,.class-matrix .class-data-row>td,.class-matrix .class-data-row>th{height:104px}
+.class-matrix-cell{width:100%;height:88px;min-height:88px;padding:2px;border:1px solid transparent;border-radius:5px;display:grid;grid-template-rows:20px 28px 28px;align-content:center;gap:2px;background:transparent;font-weight:400;line-height:1.2}
+button.class-matrix-cell:hover{background:#f4f5ed;border-color:#b5c2b1}
+.class-matrix-age{font-size:.74rem;color:var(--muted)}
+.class-matrix-line{display:flex;align-items:center;justify-content:center;gap:3px;min-height:28px}
+.class-matrix-line small{font-size:.62rem;width:12px}
+.class-matrix-line .badge{min-width:43px;max-width:54px;min-height:24px;height:24px;padding:2px 4px;font-size:.76rem}
+.class-matrix-empty{display:flex;align-items:center;justify-content:center}
+.class-matrix .class-gap{background:#f7f3e9}.class-gap-mark{color:#b4b7ad}
+.class-matrix .class-spacer>td{padding:0;border:0;line-height:0;font-size:0;min-height:0}
+.class-annual-table{table-layout:fixed;border-collapse:separate;border-spacing:0;width:100%;line-height:1.4}
+.class-annual-table th,.class-annual-table td{padding:8px 6px;width:22%;text-align:center;min-width:0}
+.class-annual-table th:first-child,.class-annual-table td:first-child{width:40%;text-align:left}
+.class-annual-table th:nth-child(2),.class-annual-table td:nth-child(2){width:16%;white-space:nowrap}
+.class-annual-table thead th{position:sticky;top:0;z-index:1;height:44px;background:#f2f3ec}
+.class-person-link{border:0;background:none;color:var(--green);text-decoration:underline;text-underline-offset:3px;min-height:44px;padding:4px 0;max-width:100%;text-align:left;line-height:1.5;overflow-wrap:anywhere;font-size:.92rem}
+.class-annual-table .badge{min-width:40px;max-width:100%;padding:4px;font-size:.82rem}
+@media(max-width:400px){.class-annual-table th,.class-annual-table td{padding:7px 3px}.class-annual-table td:nth-child(2){font-size:.78rem}}
