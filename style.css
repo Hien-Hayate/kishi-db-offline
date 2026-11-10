@@ -85,3 +85,21 @@ button.class-matrix-cell:hover{background:#f4f5ed;border-color:#b5c2b1}
 .class-person-link{border:0;background:none;color:var(--green);text-decoration:underline;text-underline-offset:3px;min-height:44px;padding:4px 0;max-width:100%;text-align:left;line-height:1.5;overflow-wrap:anywhere;font-size:.92rem}
 .class-annual-table .badge{min-width:40px;max-width:100%;padding:4px;font-size:.82rem}
 @media(max-width:400px){.class-annual-table th,.class-annual-table td{padding:7px 3px}.class-annual-table td:nth-child(2){font-size:.78rem}}
+
+/* Compare by age horizontally; keep player names and age headers in view. */
+.age-compare-viewport{max-width:100%;height:65vh;height:65dvh;min-height:280px;overflow:auto;position:relative;isolation:isolate;overscroll-behavior:contain;scrollbar-width:thin}
+.age-compare-table{table-layout:fixed;border-collapse:separate;border-spacing:0;text-align:center}
+.age-compare-table th,.age-compare-table td{width:132px;padding:7px 6px;border-right:1px solid #e9eae2;border-bottom:1px solid #e9eae2;vertical-align:top}
+.age-compare-table thead th{position:sticky;top:0;z-index:3;height:44px;vertical-align:middle;background:#f2f3ec;font-weight:600}
+.age-compare-table .age-name-corner,.age-compare-table .age-row-name{position:sticky;left:0;width:120px;border-right:2px solid #c7cdbf}
+.age-compare-table .age-name-corner{z-index:4}
+.age-compare-table .age-row-name{z-index:2;background:var(--white);white-space:normal;vertical-align:middle}
+.age-row-name .class-person-link{font-size:.9rem;text-align:center;width:100%}
+.age-row-name small{display:block;font-size:.7rem;white-space:normal;line-height:1.6}
+.age-compare-table .comparison-part{padding:3px 0 5px}.age-compare-table .comparison-part+.comparison-part{padding-top:6px}
+.age-compare-table .sub{font-size:.7rem;white-space:normal;line-height:1.5;margin:3px 0;overflow-wrap:anywhere}
+.age-compare-table .badge{min-width:44px;font-size:.82rem}
+.age-record{display:block;font-size:.74rem;line-height:1.5;overflow-wrap:anywhere;margin-top:4px}
+.age-unmapped{font-size:.8rem;line-height:1.8;vertical-align:middle!important;overflow-wrap:anywhere}
+.comparison-selection{align-items:center}.comparison-selection>button:not(.chip){font-size:.8rem;padding:8px 10px}
+input:disabled{opacity:.6;background:#eeefe8}

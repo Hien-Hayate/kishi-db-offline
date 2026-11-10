@@ -1,4 +1,4 @@
-/* Stage19-4. No network services, account, or external library is required. */
+/* Stage19-4A. No network services, account, or external library is required. */
 (function(){
   'use strict';
   const C=window.KishiCore, KEY='banjo-kishi-db-v1', $=id=>document.getElementById(id);
@@ -8,7 +8,7 @@
   try{storedRevision=localStorage.getItem(KEY);if(storedRevision)db=C.validate(JSON.parse(storedRevision));}catch(e){storageIssue='保存データを読み込めなかったため、データの読み込み画面を表示しています。保存済みデータは削除していません。編集する前にJSONバックアップから復元してください。';}
   if(db)C.validate(db);idx=C.index(db||{records:[],players:[],periods:[]});
   const ui={view:'player',selected:db?.players[0]?.id||null,query:'',rosterTop:0,competition:'junni',period:85,klass:'',event:'',blank:false,compare:[],titlePlayer:'',titleName:'',titleYear:'',titleCode:'',titleSort:'new'};
-  Object.assign(ui,{classMode:'matrix',classQuery:'',classOnlyRecords:false,classYear:'',classTop:0,classLeft:0,classSeasonTop:0});
+  Object.assign(ui,{classMode:'matrix',classQuery:'',classOnlyRecords:false,classYear:'',classTop:0,classLeft:0,classSeasonTop:0,classScope:'all',ageLeft:0,ageTop:0});
   let classCache=null;
   function getClassColumns(){if(classCache?.data!==db)classCache={data:db,columns:C.classColumns(db)};return classCache.columns;}
   function ensureClassYear(){const columns=getClassColumns();if(!columns.some(c=>c.key===ui.classYear)){const latest=(db.ryuo?.periods||[]).at(-1)?.junniPeriod;ui.classYear=((latest!==undefined?columns.find(c=>c.junni?.id===latest):null)||columns.at(-1)).key;ui.classLeft=columns.findIndex(c=>c.key===ui.classYear)*84;}}
@@ -48,7 +48,7 @@
       h+='<label>記録<select id="eventFilter">'+options([['','すべて'],...Object.entries(C.LABELS),...(ui.competition!=='junni'?[['qualified','挑決'],['groupWinner','組優勝']]:[])],ui.event)+'</select></label>';
       h+='<label class="check"><input type="checkbox" id="showBlank"'+(ui.blank?' checked':'')+'>空白の棋士も表示</label>';
     }
-    if(ui.view==='compare')h='<label class="choose">比較する棋士<select id="compareSelect">'+options([['','棋士を選択'],...db.players.map(p=>[p.id,p.name])],'')+'</select></label><button id="addCompare">比較に追加</button><span class="muted">最大4人</span>';
+    if(ui.view==='compare')h=comparisonPicker();
     $('controls').innerHTML='<label>棋戦<select id="competitionSelect">'+options([['junni','順位戦'],['ryuo','竜王戦'],['both','両方']],ui.competition)+'</select></label>'+h;
     $('competitionSelect').addEventListener('change',e=>{ui.competition=e.target.value;ui.klass='';ui.event='';if(ui.competition==='both'&&db.ryuo&&!db.ryuo.periods.some(p=>p.junniPeriod===ui.period))ui.period=db.ryuo.periods.at(-1).junniPeriod;ensurePeriod();render();rememberList();});
     $('search')?.addEventListener('input',e=>{ui.query=e.target.value;const list=nameList();if(list.length&&!list.some(p=>p.id===ui.selected))ui.selected=list[0].id;renderContent(true);rememberList();});
@@ -57,7 +57,7 @@
     $('periodSelect')?.addEventListener('change',e=>{ui.period=Number(e.target.value);renderContent();});
     $('classFilter')?.addEventListener('change',e=>{ui.klass=e.target.value;renderContent();});
     $('eventFilter')?.addEventListener('change',e=>{ui.event=e.target.value;renderContent();});
-    $('addCompare')?.addEventListener('click',()=>{const id=$('compareSelect').value;if(!id)return;if(ui.compare.includes(id))return notice('その棋士は比較に追加済みです。');if(ui.compare.length>=4)return notice('比較は4人までです。');ui.compare.push(id);notice('');renderContent();});
+    bindComparisonPicker();
   }
   function renderPlayer(){
     const list=nameList(),p=idx.players.get(ui.selected);
@@ -111,15 +111,35 @@
     h+=list.map(p=>ps.map((part,i)=>{const r=get(p.id,part.meta.id,part.competition),age=C.ageAt(p.birth,part.meta.ageAt);return '<tr>'+(i===0?'<td rowspan="'+ps.length+'"><button class="period-link" data-open-player="'+esc(p.id)+'">'+esc(p.name)+'</button></td><td rowspan="'+ps.length+'">'+esc(age===null?'不明':age+'歳')+'</td>':'')+'<td><span class="sub">'+esc(compName(part.competition))+' '+part.meta.id+'期</span>'+recordButton(p.id,part.meta.id,r,part.competition)+'</td><td class="event">'+esc(r?C.describe(db,r):'')+'</td></tr>';}).join('')).join('');
     return h+'</tbody></table>'+(list.length?'':'<p class="empty">条件に合う記録はありません。</p>')+'</div></article>';
   }
+  function comparisonPicker(){
+    return '<label class="choose">比較する棋士<select id="compareSelect">'+options([['','棋士を選択'],...db.players.filter(p=>!ui.compare.includes(p.id)).map(p=>[p.id,p.name])],'')+'</select></label><button id="addCompare">比較に追加</button>';
+  }
+  function bindComparisonPicker(){
+    $('addCompare')?.addEventListener('click',()=>{const id=$('compareSelect').value;if(!idx.players.has(id))return;if(ui.compare.includes(id))return notice('その棋士は比較に追加済みです。');ui.compare.push(id);ui.classTop=0;ui.classSeasonTop=0;if(ui.view==='classes'){ui.classScope='selected';ui.classQuery='';}notice('');renderControls();renderContent();});
+  }
+  function comparisonChips(){
+    if(!ui.compare.length)return '';
+    return '<div class="chips comparison-selection">'+ui.compare.map(id=>idx.players.get(id)).filter(Boolean).map(p=>'<button class="chip" data-remove="'+esc(p.id)+'" aria-label="'+esc(p.name)+'を比較から外す">'+esc(p.name)+' ×</button>').join('')+'<button id="clearComparison">選択を解除</button><button id="switchComparison">'+(ui.view==='compare'?'年度で比較':'同年齢比較へ')+'</button></div>';
+  }
+  function bindComparisonActions(){
+    $('content').querySelectorAll('[data-remove]').forEach(b=>b.onclick=()=>{ui.compare=ui.compare.filter(id=>id!==b.dataset.remove);ui.classTop=0;ui.classSeasonTop=0;renderControls();renderContent();});
+    $('clearComparison')?.addEventListener('click',()=>{ui.compare=[];ui.classTop=0;ui.classSeasonTop=0;ui.ageLeft=0;ui.ageTop=0;renderControls();renderContent();});
+    $('switchComparison')?.addEventListener('click',()=>{if(ui.view==='compare'){ui.view='classes';ui.classScope='selected';ui.classQuery='';ui.classMode='matrix';ui.classTop=0;}else{ui.view='compare';ui.competition=db.ryuo?'both':'junni';}render();});
+  }
   function renderCompare(){
-    const people=ui.compare.map(id=>idx.players.get(id)).filter(Boolean);
-    let h='<p class="hint">年齢は各期の年度末（3月31日）で統一。生年月日が不明の棋士は年齢へ対応させません。</p><div class="chips">'+people.map(p=>'<button class="chip" data-remove="'+esc(p.id)+'" aria-label="'+esc(p.name)+'を比較から外す">'+esc(p.name)+' ×</button>').join('')+'</div>';
-    if(!people.length)return h+'<div class="profile empty">比較する棋士を選んで追加してください。</div>';
-    const maps=people.map(p=>{const m=new Map();for(const x of forPlayer(p.id)){const a=C.ageAt(p.birth,x.meta.ageAt);if(a!==null){const entries=m.get(a)||[];entries.push(x);m.set(a,entries);}}return m;});
-    const ages=[...new Set(maps.flatMap(m=>[...m.keys()]))].sort((a,b)=>a-b);
-    h+='<article class="profile"><div class="table-wrap"><table class="compare-table"><thead><tr><th>年度末年齢</th>'+people.map(p=>'<th>'+esc(p.name)+(p.birth?'':'<span class="sub">生年月日不明</span>')+'</th>').join('')+'</tr></thead><tbody>';
-    h+=ages.map(a=>'<tr><td>'+a+'歳</td>'+maps.map(m=>'<td>'+ (m.get(a)||[]).map(({r,t,meta,competition})=>'<div class="comparison-part"><span class="sub">'+esc(compName(competition))+' 第'+meta.id+'期</span>'+recordButton(r.player,meta.id,r,competition)+'<span class="sub">基準 '+esc(meta.ageAt)+'</span><span class="sub">'+esc(C.describe(db,r))+'</span></div>').join('')+'</td>').join('')+'</tr>').join('');
-    return h+'</tbody></table>'+(ages.length?'':'<p class="empty">年齢に対応できる記録がありません。</p>')+'</div></article>';
+    const {rows,ages}=C.ageComparison(db,idx,ui.compare,ui.competition);
+    let h='<p class="hint">縦に棋士、横に年度末年齢。棋士名と年齢見出しは固定しています。横スクロールで同じ年齢の所属・記録を比較できます。年齢は各期の年度末（3月31日）で統一し、生年月日不明の棋士は年齢へ対応させません。</p>'+comparisonChips();
+    if(!rows.length)return h+'<div class="profile empty">比較する棋士を選んで追加してください。</div>';
+    h+='<article class="profile"><div id="ageCompareViewport" class="age-compare-viewport" tabindex="0" aria-label="棋士別の同年齢比較"><table class="age-compare-table" style="width:'+(120+Math.max(ages.length,1)*132)+'px"><thead><tr><th scope="col" class="age-name-corner">棋士</th>'+(ages.length?ages.map(age=>'<th scope="col">'+age+'歳</th>').join(''):'<th scope="col">年齢の対応なし</th>')+'</tr></thead><tbody>';
+    for(const {person:p,byAge} of rows){h+='<tr><th scope="row" class="age-row-name"><button class="class-person-link" data-open-player="'+esc(p.id)+'">'+esc(p.name)+'</button>'+(!p.birth?'<small>生年月日不明</small>':'')+'</th>';
+      if(!ages.length)h+='<td class="age-unmapped">'+(p.birth?'年齢に対応できる記録がありません。':'生年月日不明のため、年齢へ対応させません。')+'</td>';
+      else for(const age of ages){h+='<td data-age="'+age+'">'+(byAge.get(age)||[]).map(({r,t,meta,competition})=>'<div class="comparison-part" title="年齢基準 '+esc(meta.ageAt)+'"><span class="sub">'+esc(compName(competition))+' 第'+meta.id+'期</span>'+recordButton(r.player,meta.id,r,competition)+'<span class="sub">'+t.fiscalYear+'年度</span><span class="age-record">'+esc(C.describe(db,r))+'</span></div>').join('')+'</td>';}
+      h+='</tr>';
+    }
+    return h+'</tbody></table></div></article>';
+  }
+  function bindAgeScroll(){
+    const vp=$('ageCompareViewport');if(!vp)return;vp.scrollLeft=ui.ageLeft;vp.scrollTop=ui.ageTop;vp.addEventListener('scroll',()=>{ui.ageLeft=vp.scrollLeft||0;ui.ageTop=vp.scrollTop||0;});
   }
   function renderTitleControls(){
     if(!db.titles){$('controls').innerHTML='';return;}
@@ -168,7 +188,9 @@
   function classYearLabel(column){return column.fiscalYear+'年度'+(column.gap?'（補足）':'');}
   function renderClassControls(){
     ensureClassYear();const columns=getClassColumns();
-    $('controls').innerHTML='<label>表示形式<select id="classModeSelect">'+options([['matrix','全棋士の推移表'],['annual','年度別の全棋士一覧']],ui.classMode)+'</select></label><label class="search">棋士名で絞る<input id="classSearch" type="search" value="'+esc(ui.classQuery)+'" placeholder="空欄で全棋士" autocomplete="off"></label><label>年度<select id="classYearSelect">'+options([...columns].reverse().map(c=>[c.key,classYearLabel(c)]),ui.classYear)+'</select></label><button id="classPrevYear">前の年度</button><button id="classNextYear">次の年度</button>'+(ui.classMode==='matrix'?'<button id="classJumpYear">その年度へ</button>':'')+'<label class="check"><input id="classOnlyRecords" type="checkbox"'+(ui.classOnlyRecords?' checked':'')+'>記録のある棋士だけ</label>';
+    $('controls').innerHTML='<label>表示形式<select id="classModeSelect">'+options([['matrix','クラス推移表'],['annual','年度別一覧']],ui.classMode)+'</select></label><label>対象<select id="classScopeSelect">'+options([['all','全棋士'],['selected','選択した棋士']],ui.classScope)+'</select></label><label class="search">棋士名で絞る<input id="classSearch" type="search" value="'+esc(ui.classQuery)+'"'+(ui.classScope==='selected'?' disabled':'')+' placeholder="空欄で全棋士" autocomplete="off"></label><label>年度<select id="classYearSelect">'+options([...columns].reverse().map(c=>[c.key,classYearLabel(c)]),ui.classYear)+'</select></label><button id="classPrevYear">前の年度</button><button id="classNextYear">次の年度</button>'+(ui.classMode==='matrix'?'<button id="classJumpYear">その年度へ</button>':'')+'<label class="check"><input id="classOnlyRecords" type="checkbox"'+(ui.classOnlyRecords?' checked':'')+'>記録のある棋士だけ</label>'+comparisonPicker();
+    bindComparisonPicker();
+    $('classScopeSelect').onchange=e=>{ui.classScope=e.target.value;ui.classTop=0;ui.classSeasonTop=0;renderClassControls();renderClasses();};
     $('classModeSelect').onchange=e=>{ui.classMode=e.target.value;renderClassControls();renderClasses();};
     $('classSearch').addEventListener('input',e=>{ui.classQuery=e.target.value;ui.classTop=0;ui.classSeasonTop=0;renderClasses();});
     $('classOnlyRecords').onchange=e=>{ui.classOnlyRecords=e.target.checked;ui.classTop=0;ui.classSeasonTop=0;renderClasses();};
@@ -181,7 +203,8 @@
     $('classJumpYear')?.addEventListener('click',()=>move(ui.classYear));
   }
   function classPeople(columns,column){
-    return db.players.filter(p=>normalize(p.name).includes(normalize(ui.classQuery))&&(!ui.classOnlyRecords||(ui.classMode==='annual'?C.classCell(db,idx,p,column).hasRecord:columns.some(c=>C.classCell(db,idx,p,c).hasRecord))));
+    const people=ui.classScope==='selected'?ui.compare.map(id=>idx.players.get(id)).filter(Boolean):db.players;
+    return people.filter(p=>(ui.classScope==='selected'||normalize(p.name).includes(normalize(ui.classQuery)))&&(!ui.classOnlyRecords||(ui.classMode==='annual'?C.classCell(db,idx,p,column).hasRecord:columns.some(c=>C.classCell(db,idx,p,c).hasRecord))));
   }
   function openClassPlayer(id,key){
     ui.selected=id;ui.query='';ui.view='player';ui.competition=db.ryuo?'both':'junni';
@@ -194,7 +217,8 @@
     ensureClassYear();const columns=getClassColumns(),column=columns.find(c=>c.key===ui.classYear),people=classPeople(columns,column);
     if(ui.classMode==='annual'){renderClassAnnual(column,people);return;}
     const header=columns.map(c=>'<th scope="col"'+(c.key===ui.classYear?' class="class-focus"':'')+'><button data-class-year="'+c.key+'">'+c.fiscalYear+'年度</button><span class="class-period-label">'+(c.gap?'補足':('順'+c.junni.id+'期'))+'</span><span class="class-period-label">'+(c.ryuo?'竜'+c.ryuo.id+'期':c.gap?'期の対応なし':'竜王戦未収録')+'</span></th>').join('');
-    $('content').innerHTML='<p class="hint">縦に全棋士、横に全年度。棋士名と年度見出しは固定しています。年度の選択や「その年度へ」で横移動できます。記録のあるマス・棋士名をタップすると詳しい年表へ移動します。</p><article class="profile"><div class="section-head"><div><h2>全棋士のクラス推移</h2><p>'+people.length+'人 / 登録'+db.players.length+'人 · 年齢は各年度末</p><small id="classMatrixStatus"></small></div></div><div id="classMatrixViewport" class="class-matrix-viewport" tabindex="0" aria-label="全棋士の年度別クラス推移"><table class="class-matrix" aria-rowcount="'+(people.length+1)+'" aria-colcount="'+(columns.length+1)+'" style="width:'+(120+columns.length*84)+'px"><thead><tr><th scope="col" class="class-name-corner">棋士</th>'+header+'</tr></thead><tbody id="classMatrixRows"></tbody></table></div>'+(people.length?'':'<p class="empty">条件に合う棋士はいません。</p>')+'</article>';
+    $('content').innerHTML=comparisonChips()+'<p class="hint">縦に棋士、横に全年度。棋士名と年度見出しは固定しています。年度の選択や「その年度へ」で横移動できます。記録のあるマス・棋士名をタップすると詳しい年表へ移動します。</p><article class="profile"><div class="section-head"><div><h2>'+ (ui.classScope==='selected'?'選択した棋士のクラス推移':'全棋士のクラス推移')+'</h2><p>'+people.length+'人 / 登録'+db.players.length+'人 · 年齢は各年度末</p><small id="classMatrixStatus"></small></div></div><div id="classMatrixViewport" class="class-matrix-viewport" tabindex="0" aria-label="全棋士の年度別クラス推移"><table class="class-matrix" aria-rowcount="'+(people.length+1)+'" aria-colcount="'+(columns.length+1)+'" style="width:'+(120+columns.length*84)+'px"><thead><tr><th scope="col" class="class-name-corner">棋士</th>'+header+'</tr></thead><tbody id="classMatrixRows"></tbody></table></div>'+(people.length?'':'<p class="empty">'+(ui.classScope==='selected'&&!ui.compare.length?'比較する棋士を選んで追加してください。':'条件に合う棋士はいません。')+'</p>')+'</article>';
+    bindComparisonActions();
     const viewport=$('classMatrixViewport'),body=$('classMatrixRows'),ROW=104,HEADER=76;
     let start=-1,end=-1,scheduled=false;
     function draw(){
@@ -223,9 +247,10 @@
   }
   function renderClassAnnual(column,people){
     const detail=column.gap?'第30期と第36期の間の補足年度。所属・年齢は補完しません。':'順位戦 第'+column.junni.id+'期 / '+(column.ryuo?'竜王戦 第'+column.ryuo.id+'期':'竜王戦は未収録')+' · 年齢基準 '+column.ageAt;
-    let html='<p class="hint">全棋士を縦に表示します。名前をタップすると詳しい年表へ移動します。記録がない欄は空白、竜王戦のRも空白として扱います。</p><article class="profile"><div class="section-head"><div><h2>'+classYearLabel(column)+'のクラス一覧</h2><p>'+detail+'</p><small>'+people.length+'人 / 登録'+db.players.length+'人</small></div></div><div class="class-annual-viewport" id="classAnnualViewport"><table class="class-annual-table"><thead><tr><th scope="col">棋士</th><th scope="col">年齢</th><th scope="col">順位戦</th><th scope="col">竜王戦</th></tr></thead><tbody>';
+    let html=comparisonChips()+'<p class="hint">棋士を縦に表示します。名前をタップすると詳しい年表へ移動します。記録がない欄は空白、竜王戦のRも空白として扱います。</p><article class="profile"><div class="section-head"><div><h2>'+classYearLabel(column)+'のクラス一覧</h2><p>'+detail+'</p><small>'+people.length+'人 / 登録'+db.players.length+'人</small></div></div><div class="class-annual-viewport" id="classAnnualViewport"><table class="class-annual-table"><thead><tr><th scope="col">棋士</th><th scope="col">年齢</th><th scope="col">順位戦</th><th scope="col">竜王戦</th></tr></thead><tbody>';
     for(const p of people){const cell=C.classCell(db,idx,p,column);html+='<tr><td><button class="class-person-link" data-class-open="'+esc(p.id)+'" data-class-period="'+column.key+'" title="'+esc(p.name)+'">'+esc(p.name)+'</button></td><td>'+esc(cell.hasRecord?(cell.age===null?'不明':cell.age+'歳'):'')+'</td><td>'+badge(cell.junni)+'</td><td>'+badge(cell.ryuo)+'</td></tr>';}
-    $('content').innerHTML=html+'</tbody></table></div>'+(people.length?'':'<p class="empty">条件に合う棋士はいません。</p>')+'</article>';
+    $('content').innerHTML=html+'</tbody></table></div>'+(people.length?'':'<p class="empty">'+(ui.classScope==='selected'&&!ui.compare.length?'比較する棋士を選んで追加してください。':'条件に合う棋士はいません。')+'</p>')+'</article>';
+    bindComparisonActions();
     const viewport=$('classAnnualViewport');viewport.scrollTop=ui.classSeasonTop;viewport.addEventListener('scroll',()=>{ui.classSeasonTop=viewport.scrollTop||0;});bindClassLinks($('content'));
   }
   function renderContent(resetRoster=false){
@@ -242,7 +267,7 @@
     $('content').querySelectorAll('[data-season]').forEach(b=>b.addEventListener('click',()=>{ui.period=Number(b.dataset.season);ui.view='season';render();}));
     $('content').querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click',()=>editRecord(b.dataset.edit,Number(b.dataset.period),b.dataset.competition||'junni')));
     $('content').querySelectorAll('[data-scroll]').forEach(b=>b.addEventListener('click',()=>{const row=$('timeline-year-'+b.dataset.scroll)||$('period-row-'+b.dataset.scroll);row?.scrollIntoView({behavior:'smooth',block:'center'});}));
-    $('content').querySelectorAll('[data-remove]').forEach(b=>b.addEventListener('click',()=>{ui.compare=ui.compare.filter(id=>id!==b.dataset.remove);renderContent();}));
+    bindComparisonActions();bindAgeScroll();
   }
   function render(){
     if(db)ensurePeriod();
@@ -310,7 +335,7 @@
   function editPeriod(id){const ps=parts(idx.periods.get(id));
     openModal('開催状況の設定',ps.map(p=>'<label>'+esc(compName(p.competition))+' 第'+p.meta.id+'期<select id="'+(p.competition==='ryuo'?'ryuoOngoing':'ongoing')+'">'+options([['yes','進行中'],['no','終了']],p.meta.ongoing?'yes':'no')+'</select></label>').join(''),()=>{const next=clone(db);for(const p of ps){const t=(p.competition==='ryuo'?next.ryuo.periods:next.periods).find(x=>x.id===p.meta.id);t.ongoing=$(p.competition==='ryuo'?'ryuoOngoing':'ongoing').value==='yes';}commit(next);});
   }
-  function backup(prefix='backup'){const json=db?JSON.stringify(db,null,2):(storedRevision||'null'),blob=new Blob([json],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='banjo_kishi_stage19_4_'+prefix+'_'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}
+  function backup(prefix='backup'){const json=db?JSON.stringify(db,null,2):(storedRevision||'null'),blob=new Blob([json],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='banjo_kishi_stage19_4a_'+prefix+'_'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}
   function manage(){
     if(!db){openModal('データの読み込み','<p class="dialog-note">初期データJSONまたはバックアップを選んで、この端末へ読み込みます。</p><button type="button" id="chooseData">データファイルを選ぶ</button>',null);$('chooseData').onclick=()=>$('importInput').click();return;}
     openModal('データ管理','<p class="dialog-note">変更はこの端末・このブラウザに保存します。別端末へ移すときやアプリを置き換える前に、JSONバックアップを保存してください。</p><div class="management"><button type="button" id="exportButton">JSONバックアップを保存</button><button type="button" id="importButton">JSONを読み込む（追加・復元）</button><button type="button" id="phaseButton">第'+ui.period+'期の開催状況</button><button type="button" id="updateButton">アプリの更新を確認</button></div><p class="dialog-note">読み込み元：'+esc(db.source?.filename||'JSONバックアップ')+'<br>竜王戦の元資料：'+esc(db.ryuo?((db.ryuo.source?.filename||'')+' / '+(db.ryuo.source?.sheet||'')):'未追加')+'<br>タイトル戦の元資料：'+esc(db.titles?((db.titles.source?.filename||'')+' / '+(db.titles.source?.sheet||'')):'未追加')+'<br>取り込み範囲：順位戦、順位2の生年月日、竜王戦、棋戦。Excelの直接読み込みはこの試作には含みません。</p>',null);
