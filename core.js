@@ -39,11 +39,23 @@
     let min=null,max=null;for(const row of rows)for(const age of row.byAge.keys()){if(min===null||age<min)min=age;if(max===null||age>max)max=age;}
     return {rows,ages:min===null?[]:Array.from({length:max-min+1},(_,i)=>min+i)};
   }
+  function oshoHistory(db,player){
+    const periods=new Map((db.oshoLeague?.periods||[]).map(p=>[p.id,p]));
+    return (db.oshoLeague?.records||[]).filter(r=>r.player===player&&r.role==='participant').map(r=>({...r,season:periods.get(r.period)})).sort((a,b)=>a.season.fiscalYear-b.season.fiscalYear||a.period-b.period);
+  }
+  function oshoSeason(db,id){
+    const season=db.oshoLeague?.periods.find(p=>p.id===id);if(!season)return null;
+    const junni=db.periods.find(p=>p.fiscalYear===season.fiscalYear)||null;
+    const ryuo=junni?(db.ryuo?.periods||[]).find(p=>p.junniPeriod===junni.id)||null:null;
+    const records=db.oshoLeague.records.filter(r=>r.period===id);
+    return {season,junni,ryuo,ageAt:junni?.ageAt||String(season.fiscalYear+1)+'-03-31',holder:records.find(r=>r.role==='holder')||null,participants:records.filter(r=>r.role==='participant')};
+  }
   function titleHistory(db,player){return (db.titles?.events||[]).filter(e=>!player||e.participants.some(p=>p.player===player)).slice().sort((a,b)=>a.order-b.order);}
   function titleTotals(db,player){const all=titleHistory(db,player);return {appearances:all.length,wins:all.reduce((n,e)=>n+Number(e.participants.some(p=>p.player===player&&titleWon(p.code))),0)};}
   function titleLine(entry,player){const p=entry.participants.find(p=>p.player===player);return p?'第'+entry.period+'期'+entry.title+(entry.title.endsWith('戦')?'':'戦')+' '+TITLE_LABELS[p.code]:'';}
   function playerTimeline(db,player,competition='junni'){
-    const byYear=new Map(),unmappedMeijin=new Map();
+    const byYear=new Map(),unmappedMeijin=new Map(),leagueByYear=new Map();
+    for(const r of oshoHistory(db,player)){const year=r.season.fiscalYear;if(!leagueByYear.has(year))leagueByYear.set(year,[]);leagueByYear.get(year).push(r);}
     const meijinAnchors=new Map(db.periods.map(p=>[p.meijinYear,p]));
     for(const e of titleHistory(db,player)){
       const isMeijin=e.title==='名人'||e.title==='名人戦';
@@ -57,16 +69,17 @@
     const allowed=new Set((db.ryuo?.periods||[]).map(p=>p.junniPeriod)),rows=[];
     for(const period of db.periods){
       if(competition==='ryuo'&&!allowed.has(period.id))continue;
-      rows.push({period,fiscalYear:period.fiscalYear,meijinYear:period.meijinYear,kind:'cycle',titles:inCycle(byYear.get(period.fiscalYear)||[])});byYear.delete(period.fiscalYear);
+      rows.push({period,fiscalYear:period.fiscalYear,meijinYear:period.meijinYear,kind:'cycle',titles:inCycle(byYear.get(period.fiscalYear)||[]),leagues:leagueByYear.get(period.fiscalYear)||[]});byYear.delete(period.fiscalYear);leagueByYear.delete(period.fiscalYear);
     }
     // These are display rows only, never synthetic competition periods or player records.
-    for(const [fiscalYear,titles] of byYear){
+    for(const fiscalYear of new Set([...byYear.keys(),...leagueByYear.keys()])){
+      const titles=byYear.get(fiscalYear)||[];
       const anchor=db.periods.find(p=>p.fiscalYear===fiscalYear);
       // Explicit transition correspondence, not a universal year/period formula.
       const meijinYear=anchor?.meijinYear??(fiscalYear===1976?1977:null);
-      rows.push({period:null,fiscalYear,meijinYear,kind:'cycle',titles:inCycle(titles)});
+      rows.push({period:null,fiscalYear,meijinYear,kind:'cycle',titles:inCycle(titles),leagues:leagueByYear.get(fiscalYear)||[]});
     }
-    for(const [meijinYear,titles] of unmappedMeijin)rows.push({period:null,fiscalYear:null,meijinYear,kind:'source-meijin',titles});
+    for(const [meijinYear,titles] of unmappedMeijin)rows.push({period:null,fiscalYear:null,meijinYear,kind:'source-meijin',titles,leagues:[]});
     return rows.sort((a,b)=>(a.fiscalYear??a.meijinYear)-(b.fiscalYear??b.meijinYear)||Number(a.kind!=='source-meijin')-Number(b.kind!=='source-meijin'));
   }
   // Normal class fills in 順位2, excluding result highlights. B/C remain distinct labels.
@@ -110,6 +123,12 @@
       const rp=new Set(),anchors=new Set(),rk=new Set();
       for(const p of db.ryuo.periods){const anchor=db.periods.find(j=>j.id===p.junniPeriod);if(!Number.isInteger(p.id)||p.id<1||rp.has(p.id)||anchors.has(p.junniPeriod)||!anchor||p.ageAt!==anchor.ageAt||typeof p.ongoing!=='boolean'||!str(p.note))fail();rp.add(p.id);anchors.add(p.junniPeriod);}
       for(const r of db.ryuo.records){const key=r.player+':'+r.period;if(r.competition!=='ryuo'||!ids.has(r.player)||!rp.has(r.period)||rk.has(key)||!str(r.raw,100)||!Number.isInteger(r.fill)||!Object.hasOwn(db.palette,String(r.fill))||typeof r.qualified!=='boolean'||typeof r.groupWinner!=='boolean'||typeof r.challenger!=='boolean'||(db.ryuo.resultMode==='yellow-loss'&&typeof r.loss!=='boolean')||(r.recordEvent!==undefined&&!EVENTS.includes(r.recordEvent))||(r.className!==undefined&&!str(r.className,100)))fail();rk.add(key);}
+    }
+    if(db.oshoLeague!==undefined){
+      const l=db.oshoLeague;if(!l||!Array.isArray(l.periods)||!Array.isArray(l.records)||l.periods.length>1000||l.records.length>50000)fail();
+      const lp=new Set(),lk=new Set(),holders=new Set(),challengers=new Set();
+      for(const p of l.periods){if(!Number.isInteger(p.id)||p.id<1||lp.has(p.id)||!Number.isInteger(p.fiscalYear)||p.fiscalYear<1800||p.fiscalYear>2500)fail();lp.add(p.id);}
+      for(const r of l.records){const key=r.player+':'+r.period;if(!ids.has(r.player)||!lp.has(r.period)||lk.has(key)||!['participant','holder'].includes(r.role)||typeof r.challenger!=='boolean'||!['1','王'].includes(r.raw)||(r.role==='holder'&&(r.raw!=='王'||r.challenger))||(r.role==='participant'&&r.raw!=='1'))fail();lk.add(key);if(r.role==='holder'){if(holders.has(r.period))fail();holders.add(r.period);}if(r.challenger){if(challengers.has(r.period))fail();challengers.add(r.period);}}
     }
     if(db.titles!==undefined){
       if(!db.titles||!Array.isArray(db.titles.events)||db.titles.events.length>10000)fail();
@@ -161,6 +180,22 @@
     for(const e of incoming.titles.events){if(ids.has(e.id)||pairs.has(e.title+':'+e.period)){kept++;continue;}if(orders.has(e.order))throw new Error('タイトル戦の確定順が既存記録と重なっています。現在のデータは変更していません。');next.titles.events.push(JSON.parse(JSON.stringify(e)));ids.add(e.id);pairs.add(e.title+':'+e.period);orders.add(e.order);added++;}
     delete next.delivery;validate(next);return {data:next,added,kept};
   }
-  const api={EVENTS,LABELS,CLASS_COLORS,RYUO_COLORS,TITLE_LABELS,titleWon,titleHistory,titleTotals,titleLine,playerTimeline,classText,classLabel,isRyuoMemo,isBlankRyuoMemo,classColumns,classCell,ageComparison,validDate,ageAt,event,sourceEvent,displayClass,classColor,titleStats,result,describe,matchesEvent,index,validate,mergeRyuo,replaceRyuo,mergeTitles};
+  function mergeOshoLeague(current,incoming){
+    validate(current);validate(incoming);if(!incoming.oshoLeague)throw new Error('王将リーグの追加データがありません。');
+    if(!current.source?.sha256||current.source.sha256!==incoming.source?.sha256)throw new Error('取り込み元の棋士データが一致しません。現在のデータは変更していません。');
+    const next=JSON.parse(JSON.stringify(current)),known=new Set(next.players.map(p=>p.id)),people=new Map(incoming.players.map(p=>[p.id,p]));
+    for(const r of incoming.oshoLeague.records)if(!known.has(r.player)){
+      const person=people.get(r.player);if(next.players.some(x=>x.name===person.name))throw new Error('同名の棋士が別IDで登録されています：'+person.name+'。追加データとの対応を確認してください。');
+      next.players.push(JSON.parse(JSON.stringify(person)));known.add(r.player);
+    }
+    if(!next.oshoLeague)next.oshoLeague={...JSON.parse(JSON.stringify(incoming.oshoLeague)),periods:[],records:[]};
+    const periods=new Map(next.oshoLeague.periods.map(p=>[p.id,p]));
+    for(const p of incoming.oshoLeague.periods){if(periods.has(p.id)){if(periods.get(p.id).fiscalYear!==p.fiscalYear)throw new Error('王将リーグの期と年度の対応が既存記録と異なります。');continue;}next.oshoLeague.periods.push(JSON.parse(JSON.stringify(p)));periods.set(p.id,p);}
+    next.oshoLeague.periods.sort((a,b)=>a.id-b.id);
+    const keys=new Set(next.oshoLeague.records.map(r=>r.player+':'+r.period));let added=0,kept=0;
+    for(const r of incoming.oshoLeague.records){const key=r.player+':'+r.period;if(keys.has(key)){kept++;continue;}next.oshoLeague.records.push(JSON.parse(JSON.stringify(r)));keys.add(key);added++;}
+    delete next.delivery;validate(next);return {data:next,added,kept};
+  }
+  const api={EVENTS,LABELS,CLASS_COLORS,RYUO_COLORS,TITLE_LABELS,titleWon,titleHistory,titleTotals,titleLine,playerTimeline,classText,classLabel,isRyuoMemo,isBlankRyuoMemo,classColumns,classCell,ageComparison,oshoHistory,oshoSeason,mergeOshoLeague,validDate,ageAt,event,sourceEvent,displayClass,classColor,titleStats,result,describe,matchesEvent,index,validate,mergeRyuo,replaceRyuo,mergeTitles};
   root.KishiCore=api;if(typeof module!=='undefined')module.exports=api;
 })(typeof window!=='undefined'?window:globalThis);

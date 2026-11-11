@@ -103,3 +103,13 @@ button.class-matrix-cell:hover{background:#f4f5ed;border-color:#b5c2b1}
 .age-unmapped{font-size:.8rem;line-height:1.8;vertical-align:middle!important;overflow-wrap:anywhere}
 .comparison-selection{align-items:center}.comparison-selection>button:not(.chip){font-size:.8rem;padding:8px 10px}
 input:disabled{opacity:.6;background:#eeefe8}
+
+/* League annotations share the timeline's right-hand history column. */
+.annual-leagues{margin-top:10px}.annual-leagues-label{display:block;font-size:.74rem;color:var(--muted);line-height:1.7;margin-bottom:3px}
+.osho-history-link{display:block;border:0;background:none;padding:3px 0;min-height:32px;max-width:100%;font-weight:500;color:var(--green);font-size:.86rem;text-align:left;text-decoration:underline;text-underline-offset:3px;line-height:1.7;overflow-wrap:anywhere}
+.osho-table th:first-child,.osho-table td:first-child{width:44%}.osho-table th:nth-child(2),.osho-table td:nth-child(2){width:14%}.osho-table th:nth-child(n+3),.osho-table td:nth-child(n+3){width:21%}
+.osho-person{display:flex;align-items:center;justify-content:space-between;gap:4px;min-width:0}.osho-person .class-person-link{font-size:.86rem;min-width:0}
+.osho-role{font-size:.68rem;white-space:nowrap;padding:4px 5px;border:1px solid #c6d0bc;border-radius:5px;background:#edf2e7;color:var(--green)}
+.osho-holder td{background:#faf4df;border-bottom:2px solid #d6c595!important}.osho-holder-label{background:#ffd966;border-color:#d3b34b;color:#493911}.osho-challenger{font-weight:700}
+.osho-table td:nth-child(2){font-size:.84rem}.osho-table .badge{font-size:.8rem}
+@media(max-width:700px){.osho-history-link{font-size:.94rem}}
