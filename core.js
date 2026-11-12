@@ -48,7 +48,7 @@
     const junni=db.periods.find(p=>p.fiscalYear===season.fiscalYear)||null;
     const ryuo=junni?(db.ryuo?.periods||[]).find(p=>p.junniPeriod===junni.id)||null:null;
     const records=db.oshoLeague.records.filter(r=>r.period===id);
-    return {season,junni,ryuo,ageAt:junni?.ageAt||String(season.fiscalYear+1)+'-03-31',holder:records.find(r=>r.role==='holder')||null,participants:records.filter(r=>r.role==='participant')};
+    return {season,junni,ryuo,ageAt:junni?.ageAt||String(season.fiscalYear+1)+'-03-31',holder:records.find(r=>r.role==='holder')||null,holders:records.filter(r=>r.role==='holder'||r.role==='meijin').sort((a,b)=>Number(a.role==='meijin')-Number(b.role==='meijin')),participants:records.filter(r=>r.role==='participant')};
   }
   function titleHistory(db,player){return (db.titles?.events||[]).filter(e=>!player||e.participants.some(p=>p.player===player)).slice().sort((a,b)=>a.order-b.order);}
   function titleTotals(db,player){const all=titleHistory(db,player);return {appearances:all.length,wins:all.reduce((n,e)=>n+Number(e.participants.some(p=>p.player===player&&titleWon(p.code))),0)};}
@@ -126,9 +126,19 @@
     }
     if(db.oshoLeague!==undefined){
       const l=db.oshoLeague;if(!l||!Array.isArray(l.periods)||!Array.isArray(l.records)||l.periods.length>1000||l.records.length>50000)fail();
-      const lp=new Set(),lk=new Set(),holders=new Set(),challengers=new Set();
+      const lp=new Set(),lk=new Set(),holders=new Set(),meijins=new Set(),challengers=new Set();
       for(const p of l.periods){if(!Number.isInteger(p.id)||p.id<1||lp.has(p.id)||!Number.isInteger(p.fiscalYear)||p.fiscalYear<1800||p.fiscalYear>2500)fail();lp.add(p.id);}
-      for(const r of l.records){const key=r.player+':'+r.period;if(!ids.has(r.player)||!lp.has(r.period)||lk.has(key)||!['participant','holder'].includes(r.role)||typeof r.challenger!=='boolean'||!['1','王'].includes(r.raw)||(r.role==='holder'&&(r.raw!=='王'||r.challenger))||(r.role==='participant'&&r.raw!=='1'))fail();lk.add(key);if(r.role==='holder'){if(holders.has(r.period))fail();holders.add(r.period);}if(r.challenger){if(challengers.has(r.period))fail();challengers.add(r.period);}}
+      for(const r of l.records){
+        const key=r.player+':'+r.period;
+        if(!ids.has(r.player)||!lp.has(r.period)||lk.has(key)||!['participant','holder','meijin'].includes(r.role)||typeof r.challenger!=='boolean'||((l.annotationVersion===2||r.relegated!==undefined)&&typeof r.relegated!=='boolean')||(r.challenger&&r.relegated)||!['1','王','名','被'].includes(r.raw))fail();
+        if(r.role==='participant'&&r.raw!=='1')fail();
+        if(r.role==='holder'&&(r.raw!=='王'||r.challenger||r.relegated))fail();
+        if(r.role==='meijin'&&(!((r.period===1&&r.raw==='名')||(r.period===2&&r.raw==='被'))||r.challenger||r.relegated))fail();
+        lk.add(key);
+        if(r.role==='holder'){if(holders.has(r.period))fail();holders.add(r.period);}
+        if(r.role==='meijin'){if(meijins.has(r.period))fail();meijins.add(r.period);}
+        if(r.challenger){if(challengers.has(r.period))fail();challengers.add(r.period);}
+      }
     }
     if(db.titles!==undefined){
       if(!db.titles||!Array.isArray(db.titles.events)||db.titles.events.length>10000)fail();
@@ -182,6 +192,7 @@
   }
   function mergeOshoLeague(current,incoming){
     validate(current);validate(incoming);if(!incoming.oshoLeague)throw new Error('王将リーグの追加データがありません。');
+    if(current.oshoLeague?.annotationVersion===2&&incoming.oshoLeague.annotationVersion!==2)throw new Error('王将リーグは更新済みです。古い追加用JSONは読み込めません。');
     if(!current.source?.sha256||current.source.sha256!==incoming.source?.sha256)throw new Error('取り込み元の棋士データが一致しません。現在のデータは変更していません。');
     const next=JSON.parse(JSON.stringify(current)),known=new Set(next.players.map(p=>p.id)),people=new Map(incoming.players.map(p=>[p.id,p]));
     for(const r of incoming.oshoLeague.records)if(!known.has(r.player)){
@@ -196,6 +207,18 @@
     for(const r of incoming.oshoLeague.records){const key=r.player+':'+r.period;if(keys.has(key)){kept++;continue;}next.oshoLeague.records.push(JSON.parse(JSON.stringify(r)));keys.add(key);added++;}
     delete next.delivery;validate(next);return {data:next,added,kept};
   }
-  const api={EVENTS,LABELS,CLASS_COLORS,RYUO_COLORS,TITLE_LABELS,titleWon,titleHistory,titleTotals,titleLine,playerTimeline,classText,classLabel,isRyuoMemo,isBlankRyuoMemo,classColumns,classCell,ageComparison,oshoHistory,oshoSeason,mergeOshoLeague,validDate,ageAt,event,sourceEvent,displayClass,classColor,titleStats,result,describe,matchesEvent,index,validate,mergeRyuo,replaceRyuo,mergeTitles};
+  function replaceOshoLeague(current,incoming){
+    validate(current);validate(incoming);
+    if(incoming.oshoLeague?.annotationVersion!==2||incoming.oshoLeague.source?.sheet!=='王将')throw new Error('更新版の王将リーグ差し替えデータではありません。');
+    if(!current.source?.sha256||current.source.sha256!==incoming.source?.sha256)throw new Error('取り込み元の棋士データが一致しません。現在のデータは変更していません。');
+    const next=JSON.parse(JSON.stringify(current)),known=new Set(next.players.map(p=>p.id)),people=new Map(incoming.players.map(p=>[p.id,p]));
+    for(const r of incoming.oshoLeague.records)if(!known.has(r.player)){
+      const person=people.get(r.player);if(next.players.some(x=>x.name===person.name))throw new Error('同名の棋士が別IDで登録されています：'+person.name+'。更新データとの対応を確認してください。');
+      next.players.push(JSON.parse(JSON.stringify(person)));known.add(r.player);
+    }
+    const replaced=next.oshoLeague?.records.length||0;next.oshoLeague=JSON.parse(JSON.stringify(incoming.oshoLeague));delete next.delivery;
+    validate(next);return {data:next,replaced,loaded:next.oshoLeague.records.length};
+  }
+  const api={EVENTS,LABELS,CLASS_COLORS,RYUO_COLORS,TITLE_LABELS,titleWon,titleHistory,titleTotals,titleLine,playerTimeline,classText,classLabel,isRyuoMemo,isBlankRyuoMemo,classColumns,classCell,ageComparison,oshoHistory,oshoSeason,mergeOshoLeague,replaceOshoLeague,validDate,ageAt,event,sourceEvent,displayClass,classColor,titleStats,result,describe,matchesEvent,index,validate,mergeRyuo,replaceRyuo,mergeTitles};
   root.KishiCore=api;if(typeof module!=='undefined')module.exports=api;
 })(typeof window!=='undefined'?window:globalThis);

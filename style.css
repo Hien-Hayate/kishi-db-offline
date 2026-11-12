@@ -113,3 +113,5 @@ input:disabled{opacity:.6;background:#eeefe8}
 .osho-holder td{background:#faf4df;border-bottom:2px solid #d6c595!important}.osho-holder-label{background:#ffd966;border-color:#d3b34b;color:#493911}.osho-challenger{font-weight:700}
 .osho-table td:nth-child(2){font-size:.84rem}.osho-table .badge{font-size:.8rem}
 @media(max-width:700px){.osho-history-link{font-size:.94rem}}
+
+.osho-relegated{background:#edf1f8;border-color:#b7c7de;color:#3f5772;font-weight:600}
