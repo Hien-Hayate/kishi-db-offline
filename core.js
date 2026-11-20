@@ -50,12 +50,33 @@
     const records=db.oshoLeague.records.filter(r=>r.period===id);
     return {season,junni,ryuo,ageAt:junni?.ageAt||String(season.fiscalYear+1)+'-03-31',holder:records.find(r=>r.role==='holder')||null,holders:records.filter(r=>r.role==='holder'||r.role==='meijin').sort((a,b)=>Number(a.role==='meijin')-Number(b.role==='meijin')),participants:records.filter(r=>r.role==='participant')};
   }
+  function oiHistory(db,player){const periods=new Map((db.oiLeague?.periods||[]).map(p=>[p.id,p]));return (db.oiLeague?.records||[]).filter(r=>r.player===player&&r.role==='participant').map(r=>({...r,season:periods.get(r.period),league:'oi'})).sort((a,b)=>a.period-b.period);}
+  function oiSeason(db,id){
+    const season=db.oiLeague?.periods.find(p=>p.id===id);if(!season)return null;
+    const junni=db.periods.find(p=>p.fiscalYear===season.fiscalYear)||null,ryuo=junni?(db.ryuo?.periods||[]).find(p=>p.junniPeriod===junni.id)||null:null;
+    const records=db.oiLeague.records.filter(r=>r.period===id),groups=(id<=2?['A','B']:['R','W']).map(code=>({code,name:({A:'A組',B:'B組',R:'紅組',W:'白組'})[code],records:records.filter(r=>r.role==='participant'&&r.group===code)}));
+    return {season,junni,ryuo,ageAt:junni?.ageAt||String(season.fiscalYear+1)+'-03-31',holder:records.find(r=>r.role==='holder')||null,groups,ambiguous:id!==1&&records.filter(r=>r.status==='c').length!==1};
+  }
+  function leagueMatchResult(db,kind,record){
+    const league=kind==='oi'?db.oiLeague:db.oshoLeague;if(!league||!record)return null;
+    const season=league.periods.find(p=>p.id===record.period);if(!season)return null;
+    const records=league.records.filter(r=>r.period===record.period),challengers=records.filter(r=>kind==='oi'?r.status==='c':r.challenger);
+    let defender=null,duel=[];
+    if(kind==='oi'&&record.period===1){if(challengers.length!==2)return null;duel=challengers;}
+    else {defender=records.find(r=>kind==='osho'&&record.period<=2?r.role==='meijin':r.role==='holder');if(!defender||challengers.length!==1)return null;duel=[defender,challengers[0]];}
+    if(!duel.some(r=>r.player===record.player))return null;
+    const next=league.records.filter(r=>r.period===record.period+1&&r.role==='holder');
+    const winner=season.winner||(next.length===1?next[0].player:null);if(!winner||!duel.some(r=>r.player===winner))return null;
+    const held=record.role==='holder',won=winner===record.player;
+    const label=won?(held?'防衛':defender?.role==='holder'?'奪取':'獲得'):(held?'失冠':'敗退');
+    return {label,won,source:season.winner?season.winnerSource:{type:'next-period',period:record.period+1}};
+  }
   function titleHistory(db,player){return (db.titles?.events||[]).filter(e=>!player||e.participants.some(p=>p.player===player)).slice().sort((a,b)=>a.order-b.order);}
   function titleTotals(db,player){const all=titleHistory(db,player);return {appearances:all.length,wins:all.reduce((n,e)=>n+Number(e.participants.some(p=>p.player===player&&titleWon(p.code))),0)};}
   function titleLine(entry,player){const p=entry.participants.find(p=>p.player===player);return p?'第'+entry.period+'期'+entry.title+(entry.title.endsWith('戦')?'':'戦')+' '+TITLE_LABELS[p.code]:'';}
   function playerTimeline(db,player,competition='junni'){
     const byYear=new Map(),unmappedMeijin=new Map(),leagueByYear=new Map();
-    for(const r of oshoHistory(db,player)){const year=r.season.fiscalYear;if(!leagueByYear.has(year))leagueByYear.set(year,[]);leagueByYear.get(year).push(r);}
+    for(const r of [...oshoHistory(db,player),...oiHistory(db,player)]){const year=r.season.fiscalYear;if(!leagueByYear.has(year))leagueByYear.set(year,[]);leagueByYear.get(year).push(r);}
     const meijinAnchors=new Map(db.periods.map(p=>[p.meijinYear,p]));
     for(const e of titleHistory(db,player)){
       const isMeijin=e.title==='名人'||e.title==='名人戦';
@@ -140,6 +161,16 @@
         if(r.challenger){if(challengers.has(r.period))fail();challengers.add(r.period);}
       }
     }
+    if(db.oiLeague!==undefined){
+      const l=db.oiLeague;if(!l||!Array.isArray(l.periods)||!Array.isArray(l.records)||l.periods.length>1000||l.records.length>50000)fail();
+      const periods=new Map(),keys=new Set(),holders=new Set();
+      for(const p of l.periods){if(!Number.isInteger(p.id)||p.id<1||periods.has(p.id)||!Number.isInteger(p.fiscalYear)||p.fiscalYear<1800||p.fiscalYear>2500||(p.winner!==undefined&&(!ids.has(p.winner)||p.winnerSource?.type!=='user')))fail();periods.set(p.id,p);}
+      for(const r of l.records){const key=r.player+':'+r.period;if(!ids.has(r.player)||!periods.has(r.period)||keys.has(key)||!str(r.raw,100)||!['holder','participant'].includes(r.role))fail();keys.add(key);
+        if(r.role==='holder'){if(r.raw.trim()!=='D'||r.group!==''||r.status!==''||holders.has(r.period))fail();holders.add(r.period);}
+        else if(!(r.period<=2?['A','B']:['R','W']).includes(r.group)||!['','c','f','s'].includes(r.status)||r.raw.trim()!==r.group+r.status)fail();
+      }
+      for(const p of l.periods)if(p.winner!==undefined&&!l.records.some(r=>r.period===p.id&&r.player===p.winner&&(r.role==='holder'||r.status==='c')))fail();
+    }
     if(db.titles!==undefined){
       if(!db.titles||!Array.isArray(db.titles.events)||db.titles.events.length>10000)fail();
       const ti=new Set(),orders=new Set(),tp=new Set();
@@ -219,6 +250,28 @@
     const replaced=next.oshoLeague?.records.length||0;next.oshoLeague=JSON.parse(JSON.stringify(incoming.oshoLeague));delete next.delivery;
     validate(next);return {data:next,replaced,loaded:next.oshoLeague.records.length};
   }
-  const api={EVENTS,LABELS,CLASS_COLORS,RYUO_COLORS,TITLE_LABELS,titleWon,titleHistory,titleTotals,titleLine,playerTimeline,classText,classLabel,isRyuoMemo,isBlankRyuoMemo,classColumns,classCell,ageComparison,oshoHistory,oshoSeason,mergeOshoLeague,replaceOshoLeague,validDate,ageAt,event,sourceEvent,displayClass,classColor,titleStats,result,describe,matchesEvent,index,validate,mergeRyuo,replaceRyuo,mergeTitles};
+  function mergeOiLeague(current,incoming){
+    if(incoming?.format==='banjo-kishi-oi-addition')incoming={...incoming,format:'banjo-kishi-db'};
+    validate(current);validate(incoming);if(!incoming.oiLeague)throw new Error('王位リーグの追加データがありません。');
+    if(!current.source?.sha256||current.source.sha256!==incoming.source?.sha256)throw new Error('取り込み元の棋士データが一致しません。現在のデータは変更していません。');
+    const next=JSON.parse(JSON.stringify(current)),known=new Set(next.players.map(p=>p.id)),people=new Map(incoming.players.map(p=>[p.id,p]));
+    for(const r of incoming.oiLeague.records)if(!known.has(r.player)){const person=people.get(r.player);if(next.players.some(x=>x.name===person.name))throw new Error('同名の棋士が別IDで登録されています：'+person.name);next.players.push(JSON.parse(JSON.stringify(person)));known.add(r.player);}
+    if(!next.oiLeague)next.oiLeague={...JSON.parse(JSON.stringify(incoming.oiLeague)),periods:[],records:[]};
+    const periods=new Map(next.oiLeague.periods.map(p=>[p.id,p]));for(const p of incoming.oiLeague.periods){if(periods.has(p.id)){if(periods.get(p.id).fiscalYear!==p.fiscalYear)throw new Error('王位リーグの期と年度の対応が異なります。');continue;}next.oiLeague.periods.push(JSON.parse(JSON.stringify(p)));periods.set(p.id,p);}
+    next.oiLeague.periods.sort((a,b)=>a.id-b.id);const keys=new Set(next.oiLeague.records.map(r=>r.player+':'+r.period));let added=0,kept=0;
+    for(const r of incoming.oiLeague.records){const key=r.player+':'+r.period;if(keys.has(key)){kept++;continue;}next.oiLeague.records.push(JSON.parse(JSON.stringify(r)));keys.add(key);added++;}
+    delete next.delivery;validate(next);return {data:next,added,kept};
+  }
+  function replaceOiLeague(current,incoming){
+    if(incoming?.format==='banjo-kishi-oi-replacement')incoming={...incoming,format:'banjo-kishi-db'};
+    validate(current);validate(incoming);
+    if(incoming.oiLeague?.revision!==2||incoming.oiLeague.source?.sheet!=='王位')throw new Error('修正版の王位リーグ更新データではありません。');
+    if(!current.source?.sha256||current.source.sha256!==incoming.source?.sha256)throw new Error('取り込み元の棋士データが一致しません。現在のデータは変更していません。');
+    const next=JSON.parse(JSON.stringify(current)),known=new Set(next.players.map(p=>p.id)),people=new Map(incoming.players.map(p=>[p.id,p]));
+    for(const r of incoming.oiLeague.records)if(!known.has(r.player)){const person=people.get(r.player);if(next.players.some(x=>x.name===person.name))throw new Error('同名の棋士が別IDで登録されています：'+person.name);next.players.push(JSON.parse(JSON.stringify(person)));known.add(r.player);}
+    const replaced=next.oiLeague?.records.length||0;next.oiLeague=JSON.parse(JSON.stringify(incoming.oiLeague));delete next.delivery;
+    validate(next);return {data:next,replaced,loaded:next.oiLeague.records.length};
+  }
+  const api={EVENTS,LABELS,CLASS_COLORS,RYUO_COLORS,TITLE_LABELS,titleWon,titleHistory,titleTotals,titleLine,playerTimeline,classText,classLabel,isRyuoMemo,isBlankRyuoMemo,classColumns,classCell,ageComparison,oshoHistory,oshoSeason,mergeOshoLeague,replaceOshoLeague,oiHistory,oiSeason,leagueMatchResult,mergeOiLeague,replaceOiLeague,validDate,ageAt,event,sourceEvent,displayClass,classColor,titleStats,result,describe,matchesEvent,index,validate,mergeRyuo,replaceRyuo,mergeTitles};
   root.KishiCore=api;if(typeof module!=='undefined')module.exports=api;
 })(typeof window!=='undefined'?window:globalThis);

@@ -1,4 +1,4 @@
-/* Stage19-5A. No network services, account, or external library is required. */
+/* Stage19-6A. No network services, account, or external library is required. */
 (function(){
   'use strict';
   const C=window.KishiCore, KEY='banjo-kishi-db-v1', $=id=>document.getElementById(id);
@@ -8,7 +8,7 @@
   try{storedRevision=localStorage.getItem(KEY);if(storedRevision)db=C.validate(JSON.parse(storedRevision));}catch(e){storageIssue='保存データを読み込めなかったため、データの読み込み画面を表示しています。保存済みデータは削除していません。編集する前にJSONバックアップから復元してください。';}
   if(db)C.validate(db);idx=C.index(db||{records:[],players:[],periods:[]});
   const ui={view:'player',selected:db?.players[0]?.id||null,query:'',rosterTop:0,competition:'junni',period:85,klass:'',event:'',blank:false,compare:[],titlePlayer:'',titleName:'',titleYear:'',titleCode:'',titleSort:'new'};
-  Object.assign(ui,{classMode:'matrix',classQuery:'',classOnlyRecords:false,classYear:'',classTop:0,classLeft:0,classSeasonTop:0,classScope:'all',ageLeft:0,ageTop:0,compareCursor:'',oshoPeriod:null,oshoTop:0});
+  Object.assign(ui,{classMode:'matrix',classQuery:'',classOnlyRecords:false,classYear:'',classTop:0,classLeft:0,classSeasonTop:0,classScope:'all',ageLeft:0,ageTop:0,compareCursor:'',oshoPeriod:null,oshoTop:0,oiPeriod:null,oiTop:0});
   let classCache=null;
   function getClassColumns(){if(classCache?.data!==db)classCache={data:db,columns:C.classColumns(db)};return classCache.columns;}
   function ensureClassYear(){const columns=getClassColumns();if(!columns.some(c=>c.key===ui.classYear)){const latest=(db.ryuo?.periods||[]).at(-1)?.junniPeriod;ui.classYear=((latest!==undefined?columns.find(c=>c.junni?.id===latest):null)||columns.at(-1)).key;ui.classLeft=columns.findIndex(c=>c.key===ui.classYear)*84;}}
@@ -33,12 +33,14 @@
   function recordButton(id,p,r,competition='junni'){const label=C.classLabel(db,r)||'空白';return '<button class="'+(r?'edit-cell':'blank')+'" data-edit="'+esc(id)+'" data-period="'+p+'" data-competition="'+competition+'" aria-label="第'+p+'期 '+esc(label)+'の記録を編集">'+badge(r)+'</button>';}
   function options(items,value){return items.map(([v,t])=>'<option value="'+esc(v)+'"'+(String(v)===String(value)?' selected':'')+'>'+esc(t)+'</option>').join('');}
   function renderHeader(){
+    if(ui.view==='oi'){$('sourceCount').textContent=db.oiLeague?db.oiLeague.periods.length+'期の王位リーグ':'王位リーグは未追加';$('sourcePeriod').textContent='2組のリーグ・番勝負結果';document.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.view===ui.view)));return;}
     if(ui.view==='osho'){$('sourceCount').textContent=db.oshoLeague?db.oshoLeague.periods.length+'期の王将リーグ':'王将リーグは未追加';$('sourcePeriod').textContent='保持者・リーグ参加者と所属';document.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.view===ui.view)));return;}
     $('sourceCount').textContent=ui.view==='titles'?(db.titles?db.titles.events.length+'件のタイトル戦':'タイトル戦は未追加'):db.players.length+'棋士 / '+db.periods.length+'期'+(db.ryuo?' / 竜王'+db.ryuo.periods.length+'期':'');
     const p=db.periods.at(-1);$('sourcePeriod').textContent=ui.view==='titles'?'名人戦年度 / タイトル確定順':'順位戦 第'+p.id+'期'+(db.ryuo?' / 竜王戦 第'+db.ryuo.periods.at(-1).id+'期':' / 竜王戦は未追加');
     document.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.view===ui.view)));
   }
   function renderControls(){
+    if(ui.view==='oi'){renderOiControls();return;}
     if(ui.view==='osho'){renderOshoControls();return;}
     if(ui.view==='titles'){renderTitleControls();return;}
     if(ui.view==='classes'){renderClassControls();return;}
@@ -82,10 +84,10 @@
     else h+=unavailable('titles','全タイトル戦データ');
     h+='</div>';
     if(rs.length)h+='<div class="ribbon" aria-label="クラス推移">'+years().filter(t=>parts(t).some(part=>get(p.id,part.meta.id,part.competition))).map(t=>'<div class="ribbon-item">'+parts(t).map(part=>{const r=get(p.id,part.meta.id,part.competition);return '<span>'+ (part.competition==='ryuo'?'竜':'順')+part.meta.id+'期</span><button data-scroll="'+t.id+'" style="'+(color(r)?'background:'+color(r):'')+'" aria-label="'+esc(compName(part.competition))+'第'+part.meta.id+'期の行へ">'+(esc(C.classLabel(db,r))||'&nbsp;')+'</button>';}).join('')+'</div>').join('')+'</div>';
-    const withTitles=!!(db.titles||db.oshoLeague);
-    const titleCell=(entries,rowspan=1,leagues=[])=>'<td class="annual-titles"'+(rowspan>1?' rowspan="'+rowspan+'"':'')+'>'+(entries.length?'<span class="annual-titles-label">タイトル戦</span>':'')+entries.map(e=>{const line=C.titleLine(e,p.id),split=line.lastIndexOf(' '),won=C.titleWon(e.participants.find(x=>x.player===p.id)?.code);return '<div class="annual-title-entry'+(won?' annual-title-won':'')+'"><span class="annual-title-name">'+esc(line.slice(0,split))+'</span> <span class="annual-title-result">'+esc(line.slice(split+1))+'</span></div>';}).join('')+(leagues.length?'<div class="annual-leagues"><span class="annual-leagues-label">リーグ戦</span>'+leagues.map(r=>'<button class="osho-history-link" data-osho="'+r.period+'">第'+r.period+'期王将リーグ</button>').join('')+'</div>':'')+'</td>';
+    const withTitles=!!(db.titles||db.oshoLeague||db.oiLeague);
+    const titleCell=(entries,rowspan=1,leagues=[])=>'<td class="annual-titles"'+(rowspan>1?' rowspan="'+rowspan+'"':'')+'>'+(entries.length?'<span class="annual-titles-label">タイトル戦</span>':'')+entries.map(e=>{const line=C.titleLine(e,p.id),split=line.lastIndexOf(' '),won=C.titleWon(e.participants.find(x=>x.player===p.id)?.code);return '<div class="annual-title-entry'+(won?' annual-title-won':'')+'"><span class="annual-title-name">'+esc(line.slice(0,split))+'</span> <span class="annual-title-result">'+esc(line.slice(split+1))+'</span></div>';}).join('')+(leagues.length?'<div class="annual-leagues"><span class="annual-leagues-label">リーグ戦</span>'+leagues.map(r=>'<button class="osho-history-link" '+(r.league==='oi'?'data-oi':'data-osho')+'="'+r.period+'">第'+r.period+'期'+(r.league==='oi'?'王位':'王将')+'リーグ</button>').join('')+'</div>':'')+'</td>';
     if(withTitles)h+='<p class="timeline-note">年表は順位戦年度から締めくくりの翌春の名人戦まで。名人戦以外は出典年度を順位戦年度へ対応させ、関連する名人戦を最後に置きます。年齢は年度末時点です。</p>';
-    h+='<div class="table-wrap timeline-wrap"><table class="player-timeline" role="table"><thead><tr><th>棋戦・期</th><th>年度末年齢</th><th>所属</th><th>記録</th>'+(withTitles?'<th class="annual-titles">'+(db.oshoLeague?'タイトル戦・リーグ戦':'タイトル戦（翌春の名人戦まで）')+'</th>':'')+'</tr></thead>';
+    h+='<div class="table-wrap timeline-wrap"><table class="player-timeline" role="table"><thead><tr><th>棋戦・期</th><th>年度末年齢</th><th>所属</th><th>記録</th>'+(withTitles?'<th class="annual-titles">'+((db.oshoLeague||db.oiLeague)?'タイトル戦・リーグ戦':'タイトル戦（翌春の名人戦まで）')+'</th>':'')+'</tr></thead>';
     for(const row of C.playerTimeline(db,p.id,ui.competition).reverse()){
       const t=row.period;
       if(!t){
@@ -103,7 +105,7 @@
       });
       h+='</tbody>';
     }
-    h+='</table>'+(rs.length||C.titleHistory(db,p.id).length||C.oshoHistory(db,p.id).length?'':'<p class="empty">記録はありません。空白の期を表示して記録を追加できます。</p>')+'</div></article></div>';return h;
+    h+='</table>'+(rs.length||C.titleHistory(db,p.id).length||C.oshoHistory(db,p.id).length||C.oiHistory(db,p.id).length?'':'<p class="empty">記録はありません。空白の期を表示して記録を追加できます。</p>')+'</div></article></div>';return h;
   }
   function renderSeason(){
     const t=idx.periods.get(ui.period);
@@ -188,6 +190,26 @@
     });
     drawPeople();$('addTitlePerson').onclick=()=>{capture();people.push({player:'',code:'挑'});drawPeople();};
   }
+  function leagueResultBadge(kind,r){const result=C.leagueMatchResult(db,kind,r);if(!result)return '';return '<span class="league-match-result'+(result.won?' league-match-won':'')+'" title="'+esc(result.source?.type==='user'?'ユーザー指定の結果':'次期の保持者から判定')+'">'+result.label+'</span>';}
+  function ensureOiPeriod(){const periods=db.oiLeague?.periods||[];if(!periods.some(p=>p.id===ui.oiPeriod))ui.oiPeriod=periods.at(-1)?.id??null;}
+  function renderOiControls(){
+    if(!db.oiLeague){$('controls').innerHTML='';return;}ensureOiPeriod();const periods=db.oiLeague.periods,at=periods.findIndex(p=>p.id===ui.oiPeriod);
+    $('controls').innerHTML='<label>王位リーグの期<select id="oiPeriodSelect">'+options([...periods].reverse().map(p=>[p.id,'第'+p.id+'期 · '+p.fiscalYear+'年度']),ui.oiPeriod)+'</select></label><button id="oiPrev">前の期</button><button id="oiNext">次の期</button>';
+    function move(id){ui.oiPeriod=id;ui.oiTop=0;renderOiControls();renderOi();}
+    $('oiPeriodSelect').onchange=e=>move(Number(e.target.value));$('oiPrev').disabled=at<=0;$('oiNext').disabled=at>=periods.length-1;
+    $('oiPrev').onclick=()=>{if(at>0)move(periods[at-1].id);};$('oiNext').onclick=()=>{if(at<periods.length-1)move(periods[at+1].id);};
+  }
+  function renderOi(){
+    if(!db.oiLeague){$('content').innerHTML='<article class="profile empty"><h2>王位リーグは未追加です</h2><p>データ管理から王位リーグの追加用JSONを読み込んでください。</p><button id="loadOi">追加用JSONを選ぶ</button></article>';$('loadOi').onclick=()=>$('importInput').click();return;}
+    ensureOiPeriod();const detail=C.oiSeason(db,ui.oiPeriod);if(!detail){$('content').innerHTML='<p class="empty">王位リーグの記録がありません。</p>';return;}
+    const {season,junni,ryuo,ageAt,holder,groups,ambiguous}=detail;
+    const desc=(junni?'順位戦 第'+junni.id+'期':'対応する順位戦の期なし')+' / '+(ryuo?'竜王戦 第'+ryuo.id+'期':'竜王戦は未収録')+' · 年齢基準 '+ageAt;
+    const row=r=>{const p=idx.players.get(r.player),age=C.ageAt(p.birth,ageAt),role=r.role==='holder'?'王位':r.status==='c'?(season.id===1?'組優勝':'挑戦'):r.status==='f'?'挑決敗退':r.status==='s'?'残留':'陥落';return '<tr'+(r.role==='holder'?' class="osho-holder"':'')+'><td><div class="osho-person"><button class="class-person-link" data-oi-player="'+esc(p.id)+'">'+esc(p.name)+'</button><span class="league-annotations">'+leagueResultBadge('oi',r)+'<span class="osho-role'+(r.role==='holder'?' osho-holder-label':r.status===''?' osho-relegated':'')+'">'+role+'</span></span></div></td><td>'+esc(age===null?'不明':age+'歳')+'</td><td>'+badge(junni?get(p.id,junni.id):undefined)+'</td><td>'+badge(ryuo?get(p.id,ryuo.id,'ryuo'):undefined)+'</td></tr>';};
+    let html='<p class="hint">保持者を上段に、2つのリーグを組順に表示します。番勝負結果は役割の左に表示します。第1期は両組の勝者が直接七番勝負を行います。</p>'+(ambiguous?'<p class="notice">挑戦の記録が複数または未指定のため、この期の番勝負結果は未判定です。元記録をそのまま表示しています。</p>':'')+'<article class="profile"><div class="section-head"><div><h2>第'+season.id+'期王位リーグ</h2><p>'+season.fiscalYear+'年度 · '+desc+'</p><small>リーグ参加 '+groups.reduce((n,g)=>n+g.records.length,0)+'人'+(!holder?' · 保持者なし':'')+'</small></div></div><div class="class-annual-viewport" id="oiViewport"><table class="class-annual-table osho-table"><thead><tr><th scope="col">棋士</th><th scope="col">年齢</th><th scope="col">順位戦</th><th scope="col">竜王戦</th></tr></thead><tbody>'+(holder?row(holder):'');
+    for(const group of groups)html+='<tr class="league-group league-group-'+group.code+'"><th colspan="4" scope="rowgroup">'+group.name+' · '+group.records.length+'人</th></tr>'+group.records.map(row).join('');
+    $('content').innerHTML=html+'</tbody></table></div></article>';const viewport=$('oiViewport');viewport.scrollTop=ui.oiTop;viewport.addEventListener('scroll',()=>{ui.oiTop=viewport.scrollTop||0;});
+    $('content').querySelectorAll('[data-oi-player]').forEach(b=>b.onclick=()=>{ui.selected=b.dataset.oiPlayer;ui.query='';ui.view='player';ui.competition=db.ryuo?'both':'junni';render();rememberList();(junni?$('timeline-year-'+junni.id):$('title-year-'+season.fiscalYear))?.scrollIntoView({behavior:'smooth',block:'center'});});
+  }
   function ensureOshoPeriod(){const periods=db.oshoLeague?.periods||[];if(!periods.some(p=>p.id===ui.oshoPeriod))ui.oshoPeriod=periods.at(-1)?.id??null;}
   function renderOshoControls(){
     if(!db.oshoLeague){$('controls').innerHTML='';return;}ensureOshoPeriod();const periods=db.oshoLeague.periods,at=periods.findIndex(p=>p.id===ui.oshoPeriod);
@@ -201,8 +223,8 @@
     ensureOshoPeriod();const detail=C.oshoSeason(db,ui.oshoPeriod);if(!detail){$('content').innerHTML='<p class="empty">王将リーグの記録がありません。</p>';return;}
     const {season,junni,ryuo,ageAt,holders,participants}=detail;
     const desc=(junni?'順位戦 第'+junni.id+'期':'対応する順位戦の期なし')+' / '+(ryuo?'竜王戦 第'+ryuo.id+'期':'竜王戦は未収録')+(ageAt?' · 年齢基準 '+ageAt:'');
-    const row=r=>{const p=idx.players.get(r.player),age=ageAt?C.ageAt(p.birth,ageAt):null;return '<tr'+(r.role!=='participant'?' class="osho-holder"':'')+'><td><div class="osho-person"><button class="class-person-link" data-osho-player="'+esc(p.id)+'">'+esc(p.name)+'</button>'+(r.role!=='participant'?'<span class="osho-role osho-holder-label">'+(r.role==='meijin'?'名人':'王将')+'</span>':r.challenger?'<span class="osho-role osho-challenger">挑戦</span>':r.relegated?'<span class="osho-role osho-relegated">陥落</span>':'')+'</div></td><td>'+esc(age===null?'不明':age+'歳')+'</td><td>'+badge(junni?get(p.id,junni.id):undefined)+'</td><td>'+badge(ryuo?get(p.id,ryuo.id,'ryuo'):undefined)+'</td></tr>';};
-    let html='<p class="hint">王将位保持者を上段、その下にリーグ参加者を表示します。初期2期は名人も上段に表示します。「挑戦」「陥落」は元シートの指定どおりで、第1期の陥落は補完しません。記載のない所属は空白です。</p><article class="profile"><div class="section-head"><div><h2>第'+season.id+'期王将リーグ</h2><p>'+season.fiscalYear+'年度 · '+desc+'</p><small>リーグ参加 '+participants.length+'人'+(!holders.length?' · 保持者の記録なし':'')+'</small></div></div><div class="class-annual-viewport" id="oshoViewport"><table class="class-annual-table osho-table"><thead><tr><th scope="col">棋士</th><th scope="col">年齢</th><th scope="col">順位戦</th><th scope="col">竜王戦</th></tr></thead><tbody>'+holders.map(row).join('')+participants.map(row).join('')+'</tbody></table></div></article>';
+    const row=r=>{const p=idx.players.get(r.player),age=ageAt?C.ageAt(p.birth,ageAt):null;return '<tr'+(r.role!=='participant'?' class="osho-holder"':'')+'><td><div class="osho-person"><button class="class-person-link" data-osho-player="'+esc(p.id)+'">'+esc(p.name)+'</button><span class="league-annotations">'+leagueResultBadge('osho',r)+(r.role!=='participant'?'<span class="osho-role osho-holder-label">'+(r.role==='meijin'?'名人':'王将')+'</span>':r.challenger?'<span class="osho-role osho-challenger">挑戦</span>':r.relegated?'<span class="osho-role osho-relegated">陥落</span>':'')+'</span></div></td><td>'+esc(age===null?'不明':age+'歳')+'</td><td>'+badge(junni?get(p.id,junni.id):undefined)+'</td><td>'+badge(ryuo?get(p.id,ryuo.id,'ryuo'):undefined)+'</td></tr>';};
+    let html='<p class="hint">王将位保持者を上段、その下にリーグ参加者を表示します。初期2期は名人も上段に表示します。「挑戦」「陥落」は元シートの指定どおりで、第1期の陥落は補完しません。番勝負結果は役割の左に表示します。第2期の王将は被挑戦者決定戦の出場者なので七番勝負結果を付けません。記載のない所属は空白です。</p><article class="profile"><div class="section-head"><div><h2>第'+season.id+'期王将リーグ</h2><p>'+season.fiscalYear+'年度 · '+desc+'</p><small>リーグ参加 '+participants.length+'人'+(!holders.length?' · 保持者の記録なし':'')+'</small></div></div><div class="class-annual-viewport" id="oshoViewport"><table class="class-annual-table osho-table"><thead><tr><th scope="col">棋士</th><th scope="col">年齢</th><th scope="col">順位戦</th><th scope="col">竜王戦</th></tr></thead><tbody>'+holders.map(row).join('')+participants.map(row).join('')+'</tbody></table></div></article>';
     $('content').innerHTML=html;const viewport=$('oshoViewport');viewport.scrollTop=ui.oshoTop;viewport.addEventListener('scroll',()=>{ui.oshoTop=viewport.scrollTop||0;});
     $('content').querySelectorAll('[data-osho-player]').forEach(b=>b.onclick=()=>{ui.selected=b.dataset.oshoPlayer;ui.query='';ui.view='player';ui.competition=db.ryuo?'both':'junni';render();rememberList();const row=junni?$('timeline-year-'+junni.id):$('title-year-'+season.fiscalYear);row?.scrollIntoView({behavior:'smooth',block:'center'});});
   }
@@ -277,6 +299,7 @@
   function renderContent(resetRoster=false){
     const oldRoster=$('rosterList');if(resetRoster)ui.rosterTop=0;else if(oldRoster)ui.rosterTop=oldRoster.scrollTop||0;
     if(ui.view==='classes'){renderClasses();return;}
+    if(ui.view==='oi'){renderOi();return;}
     if(ui.view==='osho'){renderOsho();return;}
     if(ui.view==='titles'){renderTitles();return;}
     if(ui.competition==='ryuo'&&!db.ryuo){$('content').innerHTML='<article class="profile empty">竜王戦データは未追加です。<br><button id="loadRyuo">追加用JSONを選ぶ</button></article>';$('loadRyuo').onclick=()=>$('importInput').click();return;}
@@ -290,6 +313,7 @@
     $('content').querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click',()=>editRecord(b.dataset.edit,Number(b.dataset.period),b.dataset.competition||'junni')));
     $('content').querySelectorAll('[data-scroll]').forEach(b=>b.addEventListener('click',()=>{const row=$('timeline-year-'+b.dataset.scroll)||$('period-row-'+b.dataset.scroll);row?.scrollIntoView({behavior:'smooth',block:'center'});}));
     $('content').querySelectorAll('[data-osho]').forEach(b=>b.onclick=()=>{ui.oshoPeriod=Number(b.dataset.osho);ui.oshoTop=0;ui.view='osho';render();});
+    $('content').querySelectorAll('[data-oi]').forEach(b=>b.onclick=()=>{ui.oiPeriod=Number(b.dataset.oi);ui.oiTop=0;ui.view='oi';render();});
     bindComparisonActions();bindAgeScroll();
   }
   function render(){
@@ -358,10 +382,10 @@
   function editPeriod(id){const ps=parts(idx.periods.get(id));
     openModal('開催状況の設定',ps.map(p=>'<label>'+esc(compName(p.competition))+' 第'+p.meta.id+'期<select id="'+(p.competition==='ryuo'?'ryuoOngoing':'ongoing')+'">'+options([['yes','進行中'],['no','終了']],p.meta.ongoing?'yes':'no')+'</select></label>').join(''),()=>{const next=clone(db);for(const p of ps){const t=(p.competition==='ryuo'?next.ryuo.periods:next.periods).find(x=>x.id===p.meta.id);t.ongoing=$(p.competition==='ryuo'?'ryuoOngoing':'ongoing').value==='yes';}commit(next);});
   }
-  function backup(prefix='backup'){const json=db?JSON.stringify(db,null,2):(storedRevision||'null'),blob=new Blob([json],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='banjo_kishi_stage19_5a_'+prefix+'_'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}
+  function backup(prefix='backup'){const json=db?JSON.stringify(db,null,2):(storedRevision||'null'),blob=new Blob([json],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='banjo_kishi_stage19_6a_'+prefix+'_'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}
   function manage(){
     if(!db){openModal('データの読み込み','<p class="dialog-note">初期データJSONまたはバックアップを選んで、この端末へ読み込みます。</p><button type="button" id="chooseData">データファイルを選ぶ</button>',null);$('chooseData').onclick=()=>$('importInput').click();return;}
-    openModal('データ管理','<p class="dialog-note">変更はこの端末・このブラウザに保存します。別端末へ移すときやアプリを置き換える前に、JSONバックアップを保存してください。</p><div class="management"><button type="button" id="exportButton">JSONバックアップを保存</button><button type="button" id="importButton">JSONを読み込む（追加・復元）</button><button type="button" id="phaseButton">第'+ui.period+'期の開催状況</button><button type="button" id="updateButton">アプリの更新を確認</button></div><p class="dialog-note">読み込み元：'+esc(db.source?.filename||'JSONバックアップ')+'<br>竜王戦の元資料：'+esc(db.ryuo?((db.ryuo.source?.filename||'')+' / '+(db.ryuo.source?.sheet||'')):'未追加')+'<br>タイトル戦の元資料：'+esc(db.titles?((db.titles.source?.filename||'')+' / '+(db.titles.source?.sheet||'')):'未追加')+'<br>王将リーグの元資料：'+esc(db.oshoLeague?((db.oshoLeague.source?.filename||'')+' / '+(db.oshoLeague.source?.sheet||'')):'未追加')+'<br>取り込み範囲：順位戦、順位2の生年月日、竜王戦、棋戦、王将。Excelの直接読み込みはこの試作には含みません。</p>',null);
+    openModal('データ管理','<p class="dialog-note">変更はこの端末・このブラウザに保存します。別端末へ移すときやアプリを置き換える前に、JSONバックアップを保存してください。</p><div class="management"><button type="button" id="exportButton">JSONバックアップを保存</button><button type="button" id="importButton">JSONを読み込む（追加・復元）</button><button type="button" id="phaseButton">第'+ui.period+'期の開催状況</button><button type="button" id="updateButton">アプリの更新を確認</button></div><p class="dialog-note">読み込み元：'+esc(db.source?.filename||'JSONバックアップ')+'<br>竜王戦の元資料：'+esc(db.ryuo?((db.ryuo.source?.filename||'')+' / '+(db.ryuo.source?.sheet||'')):'未追加')+'<br>タイトル戦の元資料：'+esc(db.titles?((db.titles.source?.filename||'')+' / '+(db.titles.source?.sheet||'')):'未追加')+'<br>王将リーグの元資料：'+esc(db.oshoLeague?((db.oshoLeague.source?.filename||'')+' / '+(db.oshoLeague.source?.sheet||'')):'未追加')+'<br>王位リーグの元資料：'+esc(db.oiLeague?((db.oiLeague.source?.filename||'')+' / '+(db.oiLeague.source?.sheet||'')):'未追加')+'<br>取り込み範囲：順位戦、順位2の生年月日、竜王戦、棋戦、王将、王位。Excelの直接読み込みはこの試作には含みません。</p>',null);
     $('exportButton').onclick=()=>{backup();notice('バックアップの保存を開始しました。保存先のファイルを確認してください。');};
     $('importButton').onclick=()=>$('importInput').click();
     $('phaseButton').onclick=()=>editPeriod(ui.period);
@@ -371,8 +395,22 @@
     const file=e.target.files[0];e.target.value='';if(!file)return;
     try{
       if(file.size>20*1024*1024)throw new Error('この試作で復元できるJSONは20MBまでです。');
-      const incoming=JSON.parse(await file.text()),addition=incoming.delivery==='ryuo-addition',replacement=incoming.delivery==='ryuo-source-replacement',titlesAddition=incoming.delivery==='titles-addition',oshoAddition=incoming.delivery==='osho-league-addition',oshoReplacement=incoming.delivery==='osho-league-replacement';
-      const next=C.validate(incoming);delete next.delivery;
+      const incoming=JSON.parse(await file.text()),addition=incoming.delivery==='ryuo-addition',replacement=incoming.delivery==='ryuo-source-replacement',titlesAddition=incoming.delivery==='titles-addition',oshoAddition=incoming.delivery==='osho-league-addition',oshoReplacement=incoming.delivery==='osho-league-replacement',oiAddition=incoming.delivery==='oi-league-addition',oiReplacement=incoming.delivery==='oi-league-replacement';
+      if(oiAddition&&incoming.format!=='banjo-kishi-oi-addition')throw new Error('王位リーグの追加用JSON形式ではありません。');
+      if(oiReplacement&&incoming.format!=='banjo-kishi-oi-replacement')throw new Error('王位リーグの修正版JSON形式ではありません。');
+      const next=C.validate((oiAddition||oiReplacement)?{...incoming,format:'banjo-kishi-db'}:incoming);delete next.delivery;
+      if(oiReplacement){
+        if(!db)throw new Error('先に既存の棋士DBバックアップを読み込んでください。王位リーグJSONは追加・更新専用です。');
+        const changed=C.replaceOiLeague(db,next),existing=!!db.oiLeague;
+        openModal(existing?'王位リーグを更新':'王位リーグを追加','<p class="dialog-note">'+(existing?'王位リーグの'+changed.replaced+'件を、修正版の'+changed.loaded+'件に差し替えます。王位リーグの編集内容も修正版に置き換わります。':'修正版の王位リーグ'+changed.loaded+'件を追加します。')+'棋士情報・順位戦・竜王戦・タイトル戦・王将リーグは保持します。</p><button type="button" id="preBackup">現在のバックアップを保存</button><label class="check" style="margin-top:15px"><input id="restoreCheck" type="checkbox" required>現在のJSONバックアップを保存した</label>',()=>{if(!$('restoreCheck').checked)throw new Error('先にバックアップを保存してください。');commit(changed.data,'修正版の王位リーグを読み込みました。その他の記録は保持しています。');},existing?'王位リーグだけ更新':'王位リーグを追加');
+        $('preBackup').onclick=()=>backup('before_oi_update');return;
+      }
+      if(oiAddition){
+        if(!db)throw new Error('先に既存の棋士DBバックアップを読み込んでください。王位リーグJSONは追加専用です。');
+        const merged=C.mergeOiLeague(db,next);
+        openModal('王位リーグを追加','<p class="dialog-note">王位リーグの記録を'+merged.added+'件追加し、既存の王位リーグ'+merged.kept+'件は保持します。棋士情報・順位戦・竜王戦・タイトル戦・王将リーグは上書きしません。</p><button type="button" id="preBackup">現在のバックアップを保存</button><label class="check" style="margin-top:15px"><input id="restoreCheck" type="checkbox" required>現在のJSONバックアップを保存した</label>',()=>{if(!$('restoreCheck').checked)throw new Error('先にバックアップを保存してください。');commit(merged.data,'王位リーグを追加しました。既存の記録は保持しています。');},'王位リーグを追加');
+        $('preBackup').onclick=()=>backup('before_oi_add');return;
+      }
       if(oshoReplacement){
         if(!db)throw new Error('先に既存の棋士DBのJSONバックアップを読み込んでください。王将リーグJSONは更新専用です。');
         const changed=C.replaceOshoLeague(db,next);
@@ -407,7 +445,7 @@
       $('preBackup').onclick=()=>backup('before_restore');
     }catch(err){if(!$('modal').open)openModal('読み込みエラー','<p class="dialog-note">'+esc(err.message)+'</p>',null);else showModalError(err.message);}
   });
-  function rules(){openModal('データの読み方','<ul><li>王将リーグは「王将」シートの1を参加、黄色の1を挑戦、陥落の凡例と同じ色の1を陥落、王をその期の保持者として読みます。第1期の名・第2期の被は名人として上段に表示します。王将・名人の上段表示はリーグ参加数・年表のリーグ参加に含めません。第1期後はリーグがリセットされるため、陥落を推定しません。人数は固定しません。王将戦年度を同じ順位戦年度へ対応させ、未収録の所属は補完しません。</li><li>タイトル戦は「棋戦」シートの確定順を保持し、年度は名人戦年度です。棋士別年表は順位戦年度から翌春の名人戦までで区切り、名人戦以外は出典の年度を順位戦年度へ対応させます。名人戦は各順位戦期の対応する名人戦年度から配置し、年度の最後に表示します。第30期は第35期名人戦につながり、単純に同じ期数で対応させません。移行期の補足は1976年度・対応名人戦年度1977です。各棋戦の公式年度への読み替えと同年齢比較への追加は行いません。</li><li>タイトル戦の獲得数は「獲・防・奪・留」を合計します。「留」は留位として表示し獲得に含めます。登場数は元シートの記録件数で、留位を含み、実際の番勝負数とは区別します。</li><li>「挑」は挑戦敗退を表し、アプリでは「挑戦」と短縮表示します。「対」は意味未確認の元記号を保持します。棋士の人数は固定せず、初期名人戦の相手や挑戦者を作りません。色・永世称号資格の囲み罫線は取り込みません。</li><li>タイトル戦と順位戦・竜王戦の集計は各元資料ごとに独立して表示します。資料の収録範囲が異なっても相互に補完しません。</li><li>所属の色はクラス別に固定し、結果とは分けて表示します。</li><li>「宣言」「陥編」は所属に表示し、記録欄には重ねて表示しません。</li><li>名人戦登場は七番勝負の勝利と敗退の合計。名人獲得は防衛を含む七番勝負の勝利回数です。</li><li>名人・挑戦者の立場が確認された記録のみ「防衛」「獲得ならず」などに分けます。</li><li>昇級・降級・休場は記録欄に表示します。</li><li>初期のB・Cはそのまま表示。第30期の次は第36期で、欠番を生成しません。</li><li>年齢は順位戦年度末の3月31日時点。生年月日不明は不明のままです。</li><li>空白から引退確定日・引退日・翌年度の対局の有無を推定しません。</li></ul><p class="dialog-note">竜王戦の「R」は引退のメモで、所属は空白として扱います。Rだけの記録は通常の年表・クラス推移・収録件数に含めません。元の記号は保存し、引退日は推定しません。新資料「竜王戦」は太字が挑決、下線が組優勝、黄色が七番勝負敗退。勝利は次期の竜王から当期へ記録します。黄色の敗退指定は次期が空白でも有効です。旧資料は差し替え完了まで旧判定で読みます。竜王戦39期は順位戦84期と並べ、2026年3月31日を年齢基準とします。</p>',null);}
+  function rules(){openModal('データの読み方','<ul><li>王位リーグは第1・2期がA組/B組、第3期以降が紅組/白組。cは挑戦、fは挑決敗退、sは残留、接尾辞なしは陥落、Dは保持者。第1期はcの両者が直接番勝負を行います。両リーグの番勝負結果は次期保持者から判定し、王位67期はユーザー指定の結果を使います。fの棋士には七番勝負の結果を付けません。初代の勝利は獲得と表示します。</li><li>王将リーグは「王将」シートの1を参加、黄色の1を挑戦、陥落の凡例と同じ色の1を陥落、王をその期の保持者として読みます。第1期の名・第2期の被は名人として上段に表示します。王将・名人の上段表示はリーグ参加数・年表のリーグ参加に含めません。第1期後はリーグがリセットされるため、陥落を推定しません。人数は固定しません。王将戦年度を同じ順位戦年度へ対応させ、未収録の所属は補完しません。</li><li>タイトル戦は「棋戦」シートの確定順を保持し、年度は名人戦年度です。棋士別年表は順位戦年度から翌春の名人戦までで区切り、名人戦以外は出典の年度を順位戦年度へ対応させます。名人戦は各順位戦期の対応する名人戦年度から配置し、年度の最後に表示します。第30期は第35期名人戦につながり、単純に同じ期数で対応させません。移行期の補足は1976年度・対応名人戦年度1977です。各棋戦の公式年度への読み替えと同年齢比較への追加は行いません。</li><li>タイトル戦の獲得数は「獲・防・奪・留」を合計します。「留」は留位として表示し獲得に含めます。登場数は元シートの記録件数で、留位を含み、実際の番勝負数とは区別します。</li><li>「挑」は挑戦敗退を表し、アプリでは「挑戦」と短縮表示します。「対」は意味未確認の元記号を保持します。棋士の人数は固定せず、初期名人戦の相手や挑戦者を作りません。色・永世称号資格の囲み罫線は取り込みません。</li><li>タイトル戦と順位戦・竜王戦の集計は各元資料ごとに独立して表示します。資料の収録範囲が異なっても相互に補完しません。</li><li>所属の色はクラス別に固定し、結果とは分けて表示します。</li><li>「宣言」「陥編」は所属に表示し、記録欄には重ねて表示しません。</li><li>名人戦登場は七番勝負の勝利と敗退の合計。名人獲得は防衛を含む七番勝負の勝利回数です。</li><li>名人・挑戦者の立場が確認された記録のみ「防衛」「獲得ならず」などに分けます。</li><li>昇級・降級・休場は記録欄に表示します。</li><li>初期のB・Cはそのまま表示。第30期の次は第36期で、欠番を生成しません。</li><li>年齢は順位戦年度末の3月31日時点。生年月日不明は不明のままです。</li><li>空白から引退確定日・引退日・翌年度の対局の有無を推定しません。</li></ul><p class="dialog-note">竜王戦の「R」は引退のメモで、所属は空白として扱います。Rだけの記録は通常の年表・クラス推移・収録件数に含めません。元の記号は保存し、引退日は推定しません。新資料「竜王戦」は太字が挑決、下線が組優勝、黄色が七番勝負敗退。勝利は次期の竜王から当期へ記録します。黄色の敗退指定は次期が空白でも有効です。旧資料は差し替え完了まで旧判定で読みます。竜王戦39期は順位戦84期と並べ、2026年3月31日を年齢基準とします。</p>',null);}
   $('dataButton').onclick=manage;$('rulesButton').onclick=rules;$('closeModal').onclick=()=>$('modal').close();
   document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{ui.view=b.dataset.view;render();});
   render();if(storageIssue)notice(storageIssue);

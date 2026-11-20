@@ -115,3 +115,6 @@ input:disabled{opacity:.6;background:#eeefe8}
 @media(max-width:700px){.osho-history-link{font-size:.94rem}}
 
 .osho-relegated{background:#edf1f8;border-color:#b7c7de;color:#3f5772;font-weight:600}
+
+.league-annotations{display:inline-flex;align-items:center;gap:4px;flex-shrink:0}.league-match-result{font-size:.68rem;white-space:nowrap;color:#745653}.league-match-won{font-weight:700;color:#164d3d}.osho-person .class-person-link{flex:1}
+.osho-table .league-group th{width:auto;text-align:left;padding:9px 8px;font-weight:700;background:#edf0e8;border-top:1px solid var(--line)}.osho-table .league-group-R th{background:#f6e8e6}.osho-table .league-group-W th{background:#f2f3ed}
