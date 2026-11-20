@@ -71,6 +71,42 @@
     const label=won?(held?'防衛':defender?.role==='holder'?'奪取':'獲得'):(held?'失冠':'敗退');
     return {label,won,source:season.winner?season.winnerSource:{type:'next-period',period:record.period+1}};
   }
+  function competitionRole(db,r,meta,kind){
+    if(kind==='junni'&&r.role)return r.role;
+    const events=(db.titles?.events||[]).filter(e=>kind==='junni'?(e.title==='名人'||e.title==='名人戦')&&e.meijinYear===meta.meijinYear:(e.title==='竜王'||e.title==='竜王戦')&&e.period===meta.id);
+    const entries=events.flatMap(e=>e.participants.filter(p=>p.player===r.player));
+    if(entries.length===1){if(['防','失','留'].includes(entries[0].code))return 'holder';if(['奪','挑'].includes(entries[0].code))return 'challenger';if(entries[0].code==='獲')return 'initial';}
+    if(kind==='ryuo'){if(displayClass(db,r)==='竜')return 'holder';if(r.challenger||/^[1-6]組$/.test(displayClass(db,r)))return 'challenger';}
+    return '';
+  }
+  function seasonRecord(db,r,meta,kind){
+    if(!r||!meta||isBlankRyuoMemo(db,r))return [];
+    const out=[],e=event(db,r),role=competitionRole(db,r,meta,kind);
+    if(kind==='ryuo'){if(r.qualified)out.push('挑決');if(r.groupWinner)out.push('組優勝');}
+    if(e==='win'||e==='loss'){
+      if(role==='challenger')out.push('挑戦',e==='win'?'奪取':'敗退');
+      else if(role==='holder')out.push(e==='win'?'防衛':'失冠');
+      else if(role==='initial')out.push(e==='win'?'獲得':'敗退');
+      else out.push(e==='win'?'七番勝負勝利':'七番勝負敗退');
+    }else if(e==='demotion'&&kind==='junni'&&displayClass(db,r)==='C2'){
+      const periods=[...db.periods].sort((a,b)=>a.fiscalYear-b.fiscalYear),at=periods.findIndex(p=>p.id===meta.id),next=periods[at+1];
+      const nextRecord=next?db.records.find(x=>x.player===r.player&&x.period===next.id):null;
+      out.push(displayClass(db,nextRecord)==='陥編'?'陥落':'降級');
+    }else if(LABELS[e])out.push(LABELS[e]);
+    return out;
+  }
+  function competitionSeason(db,idx,kind,id,filter='',eventFilter='',showBlank=false){
+    const primary=(kind==='ryuo'?db.ryuo?.periods:db.periods)?.find(p=>p.id===id);if(!primary)return null;
+    const junni=kind==='junni'?primary:idx.periods.get(primary.junniPeriod),ryuo=kind==='ryuo'?primary:(db.ryuo?.periods||[]).find(p=>p.junniPeriod===junni.id)||null;
+    if(!junni)return null;
+    const rows=db.players.map(person=>{const cell=classCell(db,idx,person,{junni,ryuo,ageAt:junni.ageAt});return {person,...cell,primary:kind==='junni'?cell.junni:cell.ryuo,age:ageAt(person.birth,junni.ageAt)};}).filter(row=>{
+      const r=row.primary,k=displayClass(db,r),holder=k===(kind==='junni'?'名':'竜');
+      const matches=!filter||(kind==='junni'&&filter==='A'?(k==='A'||holder):kind==='ryuo'&&filter==='finals'?(!!r?.qualified||holder):k===filter);
+      return (!!r||showBlank)&&matches&&matchesEvent(db,r,eventFilter);
+    });
+    const grouped=kind==='junni'?filter==='A':filter==='finals';
+    return {kind,primary,junni,ryuo,rows,holders:grouped?rows.filter(r=>displayClass(db,r.primary)===(kind==='junni'?'名':'竜')):[],participants:grouped?rows.filter(r=>displayClass(db,r.primary)!==(kind==='junni'?'名':'竜')):rows,grouped};
+  }
   function titleHistory(db,player){return (db.titles?.events||[]).filter(e=>!player||e.participants.some(p=>p.player===player)).slice().sort((a,b)=>a.order-b.order);}
   function titleTotals(db,player){const all=titleHistory(db,player);return {appearances:all.length,wins:all.reduce((n,e)=>n+Number(e.participants.some(p=>p.player===player&&titleWon(p.code))),0)};}
   function titleLine(entry,player){const p=entry.participants.find(p=>p.player===player);return p?'第'+entry.period+'期'+entry.title+(entry.title.endsWith('戦')?'':'戦')+' '+TITLE_LABELS[p.code]:'';}
@@ -272,6 +308,6 @@
     const replaced=next.oiLeague?.records.length||0;next.oiLeague=JSON.parse(JSON.stringify(incoming.oiLeague));delete next.delivery;
     validate(next);return {data:next,replaced,loaded:next.oiLeague.records.length};
   }
-  const api={EVENTS,LABELS,CLASS_COLORS,RYUO_COLORS,TITLE_LABELS,titleWon,titleHistory,titleTotals,titleLine,playerTimeline,classText,classLabel,isRyuoMemo,isBlankRyuoMemo,classColumns,classCell,ageComparison,oshoHistory,oshoSeason,mergeOshoLeague,replaceOshoLeague,oiHistory,oiSeason,leagueMatchResult,mergeOiLeague,replaceOiLeague,validDate,ageAt,event,sourceEvent,displayClass,classColor,titleStats,result,describe,matchesEvent,index,validate,mergeRyuo,replaceRyuo,mergeTitles};
+  const api={EVENTS,LABELS,CLASS_COLORS,RYUO_COLORS,TITLE_LABELS,titleWon,titleHistory,titleTotals,titleLine,playerTimeline,classText,classLabel,isRyuoMemo,isBlankRyuoMemo,classColumns,classCell,ageComparison,oshoHistory,oshoSeason,mergeOshoLeague,replaceOshoLeague,oiHistory,oiSeason,leagueMatchResult,mergeOiLeague,replaceOiLeague,competitionRole,seasonRecord,competitionSeason,validDate,ageAt,event,sourceEvent,displayClass,classColor,titleStats,result,describe,matchesEvent,index,validate,mergeRyuo,replaceRyuo,mergeTitles};
   root.KishiCore=api;if(typeof module!=='undefined')module.exports=api;
 })(typeof window!=='undefined'?window:globalThis);

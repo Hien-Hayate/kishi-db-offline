@@ -1,4 +1,4 @@
-/* Stage19-6A. No network services, account, or external library is required. */
+/* Stage19-7. No network services, account, or external library is required. */
 (function(){
   'use strict';
   const C=window.KishiCore, KEY='banjo-kishi-db-v1', $=id=>document.getElementById(id);
@@ -9,6 +9,7 @@
   if(db)C.validate(db);idx=C.index(db||{records:[],players:[],periods:[]});
   const ui={view:'player',selected:db?.players[0]?.id||null,query:'',rosterTop:0,competition:'junni',period:85,klass:'',event:'',blank:false,compare:[],titlePlayer:'',titleName:'',titleYear:'',titleCode:'',titleSort:'new'};
   Object.assign(ui,{classMode:'matrix',classQuery:'',classOnlyRecords:false,classYear:'',classTop:0,classLeft:0,classSeasonTop:0,classScope:'all',ageLeft:0,ageTop:0,compareCursor:'',oshoPeriod:null,oshoTop:0,oiPeriod:null,oiTop:0});
+  ui.seasons={junni:{period:null,klass:'',event:'',blank:false,top:0},ryuo:{period:null,klass:'',event:'',blank:false,top:0}};
   let classCache=null;
   function getClassColumns(){if(classCache?.data!==db)classCache={data:db,columns:C.classColumns(db)};return classCache.columns;}
   function ensureClassYear(){const columns=getClassColumns();if(!columns.some(c=>c.key===ui.classYear)){const latest=(db.ryuo?.periods||[]).at(-1)?.junniPeriod;ui.classYear=((latest!==undefined?columns.find(c=>c.junni?.id===latest):null)||columns.at(-1)).key;ui.classLeft=columns.findIndex(c=>c.key===ui.classYear)*84;}}
@@ -40,18 +41,13 @@
     document.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.view===ui.view)));
   }
   function renderControls(){
+    if(['junni','ryuo'].includes(ui.view)){renderCompetitionControls();return;}
     if(ui.view==='oi'){renderOiControls();return;}
     if(ui.view==='osho'){renderOshoControls();return;}
     if(ui.view==='titles'){renderTitleControls();return;}
     if(ui.view==='classes'){renderClassControls();return;}
     let h='';
     if(ui.view==='player')h='<label class="search">棋士名で探す<input id="search" type="search" placeholder="棋士名を入力" value="'+esc(ui.query)+'" autocomplete="off"></label><label class="check"><input type="checkbox" id="showBlank"'+(ui.blank?' checked':'')+'>空白の期も表示</label><button id="addPlayer">棋士追加</button>';
-    if(ui.view==='season'){
-      h='<label>期<select id="periodSelect">'+options([...years()].reverse().map(p=>[p.id,seasonLabel(p)]),ui.period)+'</select></label>';
-      h+='<label>所属<select id="classFilter">'+options([['','すべて'],...[...new Set([...(ui.competition!=='ryuo'?Object.keys(C.CLASS_COLORS):[]),...(ui.competition!=='junni'?Object.keys(C.RYUO_COLORS):[])])].map(x=>[x,C.classText(x)])],ui.klass)+'</select></label>';
-      h+='<label>記録<select id="eventFilter">'+options([['','すべて'],...Object.entries(C.LABELS),...(ui.competition!=='junni'?[['qualified','挑決'],['groupWinner','組優勝']]:[])],ui.event)+'</select></label>';
-      h+='<label class="check"><input type="checkbox" id="showBlank"'+(ui.blank?' checked':'')+'>空白の棋士も表示</label>';
-    }
     if(ui.view==='compare')h=comparisonPicker();
     $('controls').innerHTML='<label>棋戦<select id="competitionSelect">'+options([['junni','順位戦'],['ryuo','竜王戦'],['both','両方']],ui.competition)+'</select></label>'+h;
     $('competitionSelect').addEventListener('change',e=>{ui.competition=e.target.value;ui.klass='';ui.event='';if(ui.competition==='both'&&db.ryuo&&!db.ryuo.periods.some(p=>p.junniPeriod===ui.period))ui.period=db.ryuo.periods.at(-1).junniPeriod;ensurePeriod();render();rememberList();});
@@ -101,19 +97,40 @@
       h+='<tbody id="timeline-year-'+t.id+'" class="timeline-year'+(ps.length>1?' paired':'')+'">';
       ps.forEach((part,i)=>{const r=get(p.id,part.meta.id,part.competition),age=C.ageAt(p.birth,part.meta.ageAt);
         const description=r?C.describe(db,r):'';
-        h+='<tr class="timeline-part-'+i+'"'+(i===0?' id="period-row-'+t.id+'"':'')+'><td class="timeline-period"><button class="period-link" data-season="'+t.id+'">'+esc(compName(part.competition))+' '+part.meta.id+'期</button><span class="sub">基準 '+esc(part.meta.ageAt)+'</span>'+(withTitles&&i===0?'<span class="sub">順位戦年度 '+row.fiscalYear+'</span>':'')+'</td>'+(i===0?'<td class="timeline-age" rowspan="'+ps.length+'">'+esc(age===null?'不明':age+'歳')+'</td>':'')+'<td class="timeline-class">'+recordButton(p.id,part.meta.id,r,part.competition)+'</td><td class="event timeline-result">'+(description?'<span class="timeline-result-label">'+esc(compName(part.competition))+'の記録</span>':'')+esc(description)+'</td>'+(withTitles&&i===0?titleCell(row.titles,ps.length,row.leagues):'')+'</tr>';
+        h+='<tr class="timeline-part-'+i+'"'+(i===0?' id="period-row-'+t.id+'"':'')+'><td class="timeline-period"><button class="period-link" data-season="'+t.id+'" data-season-kind="'+part.competition+'">'+esc(compName(part.competition))+' '+part.meta.id+'期</button><span class="sub">基準 '+esc(part.meta.ageAt)+'</span>'+(withTitles&&i===0?'<span class="sub">順位戦年度 '+row.fiscalYear+'</span>':'')+'</td>'+(i===0?'<td class="timeline-age" rowspan="'+ps.length+'">'+esc(age===null?'不明':age+'歳')+'</td>':'')+'<td class="timeline-class">'+recordButton(p.id,part.meta.id,r,part.competition)+'</td><td class="event timeline-result">'+(description?'<span class="timeline-result-label">'+esc(compName(part.competition))+'の記録</span>':'')+esc(description)+'</td>'+(withTitles&&i===0?titleCell(row.titles,ps.length,row.leagues):'')+'</tr>';
       });
       h+='</tbody>';
     }
     h+='</table>'+(rs.length||C.titleHistory(db,p.id).length||C.oshoHistory(db,p.id).length||C.oiHistory(db,p.id).length?'':'<p class="empty">記録はありません。空白の期を表示して記録を追加できます。</p>')+'</div></article></div>';return h;
   }
-  function renderSeason(){
-    const t=idx.periods.get(ui.period);
-    if(!t)return '<p class="empty">対応する期がありません。</p>';
-    const ps=parts(t),list=db.players.filter(p=>ps.some(part=>{const r=get(p.id,part.meta.id,part.competition);return (r||ui.blank)&&(!ui.klass||C.displayClass(db,r)===ui.klass)&&C.matchesEvent(db,r,ui.event);}));
-    let h='<article class="profile"><div class="section-head"><div><p class="eyebrow">年齢基準 '+esc(t.ageAt)+'</p><h2>'+esc(seasonLabel(t))+'</h2><p>'+list.length+'人を表示'+(ui.competition==='both'&&ps.length===1?' · 対応する竜王戦データなし':'')+(t.ongoing?' · 順位戦進行中':'')+(t.note?'<br>'+esc(t.note):'')+'</p></div><button id="editPeriod">期の設定</button></div><div class="table-wrap"><table><thead><tr><th>棋士</th><th>年度末年齢</th><th>棋戦・所属</th><th>記録</th></tr></thead><tbody>';
-    h+=list.map(p=>ps.map((part,i)=>{const r=get(p.id,part.meta.id,part.competition),age=C.ageAt(p.birth,part.meta.ageAt);return '<tr>'+(i===0?'<td rowspan="'+ps.length+'"><button class="period-link" data-open-player="'+esc(p.id)+'">'+esc(p.name)+'</button></td><td rowspan="'+ps.length+'">'+esc(age===null?'不明':age+'歳')+'</td>':'')+'<td><span class="sub">'+esc(compName(part.competition))+' '+part.meta.id+'期</span>'+recordButton(p.id,part.meta.id,r,part.competition)+'</td><td class="event">'+esc(r?C.describe(db,r):'')+'</td></tr>';}).join('')).join('');
-    return h+'</tbody></table>'+(list.length?'':'<p class="empty">条件に合う記録はありません。</p>')+'</div></article>';
+  function ensureCompetitionState(kind){const state=ui.seasons[kind],periods=kind==='junni'?db.periods:(db.ryuo?.periods||[]);if(!periods.some(p=>p.id===state.period))state.period=periods.at(-1)?.id??null;return {state,periods};}
+  function renderCompetitionControls(){
+    const kind=ui.view,{state,periods}=ensureCompetitionState(kind);if(!periods.length){$('controls').innerHTML='';return;}
+    const classes=kind==='junni'?Object.keys(C.CLASS_COLORS).filter(k=>k!=='名'):Object.keys(C.RYUO_COLORS);
+    const classOptions=[['','すべて（クラス選択なし）'],...(kind==='ryuo'?[['finals','挑決・竜王']]:[]),...classes.map(k=>[k,kind==='junni'&&k==='A'?'A級・名人':C.classText(k)])];
+    $('controls').innerHTML='<label>期<select id="periodSelect">'+options([...periods].reverse().map(p=>[p.id,compName(kind)+' 第'+p.id+'期']),state.period)+'</select></label><label>クラス<select id="classFilter">'+options(classOptions,state.klass)+'</select></label><label>記録<select id="eventFilter">'+options([['','すべて'],...Object.entries(C.LABELS),...(kind==='ryuo'?[['qualified','挑決'],['groupWinner','組優勝']]:[])],state.event)+'</select></label><label class="check"><input type="checkbox" id="showBlank"'+(state.blank?' checked':'')+'>空白の棋士も表示</label>';
+    for(const [id,key] of [['periodSelect','period'],['classFilter','klass'],['eventFilter','event']])$(id).onchange=e=>{state[key]=key==='period'?Number(e.target.value):e.target.value;state.top=0;renderCompetitionView();};
+    $('showBlank').onchange=e=>{state.blank=e.target.checked;state.top=0;renderCompetitionView();};
+  }
+  function competitionDetails(){const {state}=ensureCompetitionState(ui.view);return C.competitionSeason(db,idx,ui.view,state.period,state.klass,state.event,state.blank);}
+  function renderCompetitionView(){
+    const kind=ui.view,{state}=ensureCompetitionState(kind),detail=competitionDetails();
+    if(!detail){$('content').innerHTML='<article class="profile empty">'+compName(kind)+'データは未追加です。<br><button id="loadCompetition">追加用JSONを選ぶ</button></article>';$('loadCompetition').onclick=()=>$('importInput').click();return;}
+    const {junni,ryuo,primary,rows,holders,participants,grouped}=detail;ui.period=junni.id;
+    const order=kind==='junni'?['junni','ryuo']:['ryuo','junni'];
+    const recordLines=row=>order.map(comp=>{const words=C.seasonRecord(db,row[comp],comp==='junni'?junni:ryuo,comp);return words.length?'<span class="season-record-line'+(words.some(w=>['防衛','奪取','獲得'].includes(w))?' season-record-won':'')+'">'+(comp==='junni'?'順：':'竜：')+esc(words.join('・'))+'</span>':'';}).join('');
+    const rowHtml=row=>'<tr'+(grouped&&holders.includes(row)?' class="competition-holder"':'')+'><td><div class="season-person"><button class="class-person-link" data-open-player="'+esc(row.person.id)+'">'+esc(row.person.name)+'</button><span class="season-records">'+recordLines(row)+'</span></div></td><td>'+esc(row.age===null?'不明':row.age+'歳')+'</td>'+order.map(comp=>'<td>'+(comp==='ryuo'&&!ryuo?'':recordButton(row.person.id,(comp==='junni'?junni:ryuo).id,row[comp],comp))+'</td>').join('')+'</tr>';
+    const head=kind==='junni'?'名人':'竜王',lower=kind==='junni'?'A級':'挑決進出者';
+    let html='<p class="hint">名前と年齢の間に記録を表示します。順は順位戦、竜は竜王戦です。記録・クラスの絞り込みは'+compName(kind)+'が対象です。</p><article class="profile"><div class="section-head"><div><h2>'+compName(kind)+' 第'+primary.id+'期</h2><p>順位戦 第'+junni.id+'期 / '+(ryuo?'竜王戦 第'+ryuo.id+'期':'竜王戦は未収録')+' · 年齢基準 '+esc(junni.ageAt)+'</p><small>'+rows.length+'人を表示'+(primary.ongoing?' · 進行中':'')+'</small></div><button id="editSeasonPeriod">期の設定</button></div><div class="class-annual-viewport" id="competitionViewport"><table class="class-annual-table competition-table"><thead><tr><th scope="col">棋士・記録</th><th scope="col">年齢</th>'+order.map(comp=>'<th scope="col">'+compName(comp)+'</th>').join('')+'</tr></thead><tbody>';
+    if(grouped){html+='<tr class="competition-group"><th colspan="4" scope="rowgroup">'+head+'</th></tr>'+holders.map(rowHtml).join('')+'<tr class="competition-group"><th colspan="4" scope="rowgroup">'+lower+' · '+participants.length+'人</th></tr>'+participants.map(rowHtml).join('');}else html+=rows.map(rowHtml).join('');
+    $('content').innerHTML=html+'</tbody></table></div>'+(rows.length?'':'<p class="empty">条件に合う記録はありません。</p>')+'</article>';
+    const viewport=$('competitionViewport');viewport.scrollTop=state.top;viewport.addEventListener('scroll',()=>{state.top=viewport.scrollTop||0;});
+    $('editSeasonPeriod').onclick=editCompetitionPeriod;
+    $('content').querySelectorAll('[data-open-player]').forEach(b=>b.onclick=()=>{ui.selected=b.dataset.openPlayer;ui.query='';ui.rosterTop=0;ui.view='player';ui.competition=db.ryuo?'both':'junni';render();rememberList();});
+    $('content').querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>editRecord(b.dataset.edit,Number(b.dataset.period),b.dataset.competition));
+  }
+  function editCompetitionPeriod(){const kind=ui.view,detail=competitionDetails();if(!detail)return;const meta=detail.primary;
+    openModal(compName(kind)+' 第'+meta.id+'期の開催状況','<label>開催状況<select id="competitionOngoing">'+options([['yes','進行中'],['no','終了']],meta.ongoing?'yes':'no')+'</select></label>',()=>{const next=clone(db),collection=kind==='junni'?next.periods:next.ryuo.periods;collection.find(p=>p.id===meta.id).ongoing=$('competitionOngoing').value==='yes';commit(next);});
   }
   function comparisonPicker(){
     return '<label class="choose">比較する棋士<select id="compareSelect">'+options([['','棋士を選択'],...db.players.map(p=>[p.id,p.name+(ui.compare.includes(p.id)?'（追加済み）':'')])],ui.compareCursor)+'</select></label><button id="addCompare">比較に追加</button>';
@@ -204,7 +221,7 @@
     ensureOiPeriod();const detail=C.oiSeason(db,ui.oiPeriod);if(!detail){$('content').innerHTML='<p class="empty">王位リーグの記録がありません。</p>';return;}
     const {season,junni,ryuo,ageAt,holder,groups,ambiguous}=detail;
     const desc=(junni?'順位戦 第'+junni.id+'期':'対応する順位戦の期なし')+' / '+(ryuo?'竜王戦 第'+ryuo.id+'期':'竜王戦は未収録')+' · 年齢基準 '+ageAt;
-    const row=r=>{const p=idx.players.get(r.player),age=C.ageAt(p.birth,ageAt),role=r.role==='holder'?'王位':r.status==='c'?(season.id===1?'組優勝':'挑戦'):r.status==='f'?'挑決敗退':r.status==='s'?'残留':'陥落';return '<tr'+(r.role==='holder'?' class="osho-holder"':'')+'><td><div class="osho-person"><button class="class-person-link" data-oi-player="'+esc(p.id)+'">'+esc(p.name)+'</button><span class="league-annotations">'+leagueResultBadge('oi',r)+'<span class="osho-role'+(r.role==='holder'?' osho-holder-label':r.status===''?' osho-relegated':'')+'">'+role+'</span></span></div></td><td>'+esc(age===null?'不明':age+'歳')+'</td><td>'+badge(junni?get(p.id,junni.id):undefined)+'</td><td>'+badge(ryuo?get(p.id,ryuo.id,'ryuo'):undefined)+'</td></tr>';};
+    const row=r=>{const p=idx.players.get(r.player),age=C.ageAt(p.birth,ageAt),role=r.role==='holder'?'王位':r.status==='c'?(season.id===1?'組優勝':'挑戦'):r.status==='f'?'挑決敗退':r.status==='s'?'残留':'';return '<tr'+(r.role==='holder'?' class="osho-holder"':'')+'><td><div class="osho-person"><button class="class-person-link" data-oi-player="'+esc(p.id)+'">'+esc(p.name)+'</button><span class="league-annotations">'+leagueResultBadge('oi',r)+(role?'<span class="osho-role'+(r.role==='holder'?' osho-holder-label':'')+'">'+role+'</span>':'')+'</span></div></td><td>'+esc(age===null?'不明':age+'歳')+'</td><td>'+badge(junni?get(p.id,junni.id):undefined)+'</td><td>'+badge(ryuo?get(p.id,ryuo.id,'ryuo'):undefined)+'</td></tr>';};
     let html='<p class="hint">保持者を上段に、2つのリーグを組順に表示します。番勝負結果は役割の左に表示します。第1期は両組の勝者が直接七番勝負を行います。</p>'+(ambiguous?'<p class="notice">挑戦の記録が複数または未指定のため、この期の番勝負結果は未判定です。元記録をそのまま表示しています。</p>':'')+'<article class="profile"><div class="section-head"><div><h2>第'+season.id+'期王位リーグ</h2><p>'+season.fiscalYear+'年度 · '+desc+'</p><small>リーグ参加 '+groups.reduce((n,g)=>n+g.records.length,0)+'人'+(!holder?' · 保持者なし':'')+'</small></div></div><div class="class-annual-viewport" id="oiViewport"><table class="class-annual-table osho-table"><thead><tr><th scope="col">棋士</th><th scope="col">年齢</th><th scope="col">順位戦</th><th scope="col">竜王戦</th></tr></thead><tbody>'+(holder?row(holder):'');
     for(const group of groups)html+='<tr class="league-group league-group-'+group.code+'"><th colspan="4" scope="rowgroup">'+group.name+' · '+group.records.length+'人</th></tr>'+group.records.map(row).join('');
     $('content').innerHTML=html+'</tbody></table></div></article>';const viewport=$('oiViewport');viewport.scrollTop=ui.oiTop;viewport.addEventListener('scroll',()=>{ui.oiTop=viewport.scrollTop||0;});
@@ -298,18 +315,19 @@
   }
   function renderContent(resetRoster=false){
     const oldRoster=$('rosterList');if(resetRoster)ui.rosterTop=0;else if(oldRoster)ui.rosterTop=oldRoster.scrollTop||0;
+    if(['junni','ryuo'].includes(ui.view)){renderCompetitionView();return;}
     if(ui.view==='classes'){renderClasses();return;}
     if(ui.view==='oi'){renderOi();return;}
     if(ui.view==='osho'){renderOsho();return;}
     if(ui.view==='titles'){renderTitles();return;}
     if(ui.competition==='ryuo'&&!db.ryuo){$('content').innerHTML='<article class="profile empty">竜王戦データは未追加です。<br><button id="loadRyuo">追加用JSONを選ぶ</button></article>';$('loadRyuo').onclick=()=>$('importInput').click();return;}
-    $('content').innerHTML=((ui.competition!=='junni'&&db.ryuo&&db.ryuo.resultMode!=='yellow-loss')?'<p class="notice">竜王戦は旧シートのデータです。新しい差し替え用JSONを「データ管理」から読み込んでください。</p>':'')+(ui.competition==='both'&&!db.ryuo?'<p class="hint">竜王戦は未追加です。「データ管理」から追加用JSONを読み込めます。</p>':'')+(ui.view==='player'?renderPlayer():ui.view==='season'?renderSeason():renderCompare());
+    $('content').innerHTML=((ui.competition!=='junni'&&db.ryuo&&db.ryuo.resultMode!=='yellow-loss')?'<p class="notice">竜王戦は旧シートのデータです。新しい差し替え用JSONを「データ管理」から読み込んでください。</p>':'')+(ui.competition==='both'&&!db.ryuo?'<p class="hint">竜王戦は未追加です。「データ管理」から追加用JSONを読み込めます。</p>':'')+(ui.view==='player'?renderPlayer():renderCompare());
     if($('rosterList'))$('rosterList').scrollTop=ui.rosterTop;
     $('editProfile')?.addEventListener('click',()=>editProfile(ui.selected));
     $('openTitleHistory')?.addEventListener('click',()=>{ui.titlePlayer=ui.selected;ui.titleName='';ui.titleYear='';ui.titleCode='';ui.view='titles';render();});
     $('editPeriod')?.addEventListener('click',()=>editPeriod(ui.period));
     $('content').querySelectorAll('[data-player],[data-open-player]').forEach(b=>b.addEventListener('click',()=>{ui.selected=b.dataset.player||b.dataset.openPlayer;ui.view='player';if(b.dataset.openPlayer){ui.query='';ui.rosterTop=0;}render();rememberList();}));
-    $('content').querySelectorAll('[data-season]').forEach(b=>b.addEventListener('click',()=>{ui.period=Number(b.dataset.season);ui.view='season';render();}));
+    $('content').querySelectorAll('[data-season]').forEach(b=>b.addEventListener('click',()=>{const kind=b.dataset.seasonKind||'junni',anchor=Number(b.dataset.season),meta=kind==='junni'?idx.periods.get(anchor):(db.ryuo?.periods||[]).find(p=>p.junniPeriod===anchor);if(!meta)return;const state=ui.seasons[kind];state.period=meta.id;state.klass='';state.event='';state.top=0;ui.view=kind;render();}));
     $('content').querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click',()=>editRecord(b.dataset.edit,Number(b.dataset.period),b.dataset.competition||'junni')));
     $('content').querySelectorAll('[data-scroll]').forEach(b=>b.addEventListener('click',()=>{const row=$('timeline-year-'+b.dataset.scroll)||$('period-row-'+b.dataset.scroll);row?.scrollIntoView({behavior:'smooth',block:'center'});}));
     $('content').querySelectorAll('[data-osho]').forEach(b=>b.onclick=()=>{ui.oshoPeriod=Number(b.dataset.osho);ui.oshoTop=0;ui.view='osho';render();});
@@ -382,13 +400,13 @@
   function editPeriod(id){const ps=parts(idx.periods.get(id));
     openModal('開催状況の設定',ps.map(p=>'<label>'+esc(compName(p.competition))+' 第'+p.meta.id+'期<select id="'+(p.competition==='ryuo'?'ryuoOngoing':'ongoing')+'">'+options([['yes','進行中'],['no','終了']],p.meta.ongoing?'yes':'no')+'</select></label>').join(''),()=>{const next=clone(db);for(const p of ps){const t=(p.competition==='ryuo'?next.ryuo.periods:next.periods).find(x=>x.id===p.meta.id);t.ongoing=$(p.competition==='ryuo'?'ryuoOngoing':'ongoing').value==='yes';}commit(next);});
   }
-  function backup(prefix='backup'){const json=db?JSON.stringify(db,null,2):(storedRevision||'null'),blob=new Blob([json],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='banjo_kishi_stage19_6a_'+prefix+'_'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}
+  function backup(prefix='backup'){const json=db?JSON.stringify(db,null,2):(storedRevision||'null'),blob=new Blob([json],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='banjo_kishi_stage19_7_'+prefix+'_'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}
   function manage(){
     if(!db){openModal('データの読み込み','<p class="dialog-note">初期データJSONまたはバックアップを選んで、この端末へ読み込みます。</p><button type="button" id="chooseData">データファイルを選ぶ</button>',null);$('chooseData').onclick=()=>$('importInput').click();return;}
-    openModal('データ管理','<p class="dialog-note">変更はこの端末・このブラウザに保存します。別端末へ移すときやアプリを置き換える前に、JSONバックアップを保存してください。</p><div class="management"><button type="button" id="exportButton">JSONバックアップを保存</button><button type="button" id="importButton">JSONを読み込む（追加・復元）</button><button type="button" id="phaseButton">第'+ui.period+'期の開催状況</button><button type="button" id="updateButton">アプリの更新を確認</button></div><p class="dialog-note">読み込み元：'+esc(db.source?.filename||'JSONバックアップ')+'<br>竜王戦の元資料：'+esc(db.ryuo?((db.ryuo.source?.filename||'')+' / '+(db.ryuo.source?.sheet||'')):'未追加')+'<br>タイトル戦の元資料：'+esc(db.titles?((db.titles.source?.filename||'')+' / '+(db.titles.source?.sheet||'')):'未追加')+'<br>王将リーグの元資料：'+esc(db.oshoLeague?((db.oshoLeague.source?.filename||'')+' / '+(db.oshoLeague.source?.sheet||'')):'未追加')+'<br>王位リーグの元資料：'+esc(db.oiLeague?((db.oiLeague.source?.filename||'')+' / '+(db.oiLeague.source?.sheet||'')):'未追加')+'<br>取り込み範囲：順位戦、順位2の生年月日、竜王戦、棋戦、王将、王位。Excelの直接読み込みはこの試作には含みません。</p>',null);
+    openModal('データ管理','<p class="dialog-note">変更はこの端末・このブラウザに保存します。別端末へ移すときやアプリを置き換える前に、JSONバックアップを保存してください。</p><div class="management"><button type="button" id="exportButton">JSONバックアップを保存</button><button type="button" id="importButton">JSONを読み込む（追加・復元）</button><button type="button" id="phaseButton">'+(['junni','ryuo'].includes(ui.view)?compName(ui.view)+' 第'+ui.seasons[ui.view].period+'期':'第'+ui.period+'期')+'の開催状況</button><button type="button" id="updateButton">アプリの更新を確認</button></div><p class="dialog-note">読み込み元：'+esc(db.source?.filename||'JSONバックアップ')+'<br>竜王戦の元資料：'+esc(db.ryuo?((db.ryuo.source?.filename||'')+' / '+(db.ryuo.source?.sheet||'')):'未追加')+'<br>タイトル戦の元資料：'+esc(db.titles?((db.titles.source?.filename||'')+' / '+(db.titles.source?.sheet||'')):'未追加')+'<br>王将リーグの元資料：'+esc(db.oshoLeague?((db.oshoLeague.source?.filename||'')+' / '+(db.oshoLeague.source?.sheet||'')):'未追加')+'<br>王位リーグの元資料：'+esc(db.oiLeague?((db.oiLeague.source?.filename||'')+' / '+(db.oiLeague.source?.sheet||'')):'未追加')+'<br>取り込み範囲：順位戦、順位2の生年月日、竜王戦、棋戦、王将、王位。Excelの直接読み込みはこの試作には含みません。</p>',null);
     $('exportButton').onclick=()=>{backup();notice('バックアップの保存を開始しました。保存先のファイルを確認してください。');};
     $('importButton').onclick=()=>$('importInput').click();
-    $('phaseButton').onclick=()=>editPeriod(ui.period);
+    $('phaseButton').onclick=()=>['junni','ryuo'].includes(ui.view)?editCompetitionPeriod():editPeriod(ui.period);
     $('updateButton').onclick=async()=>{try{const reg=await navigator.serviceWorker?.getRegistration();if(!reg)return showModalError('ブラウザで配信URLを開いた場合に更新を確認できます。');await reg.update();showModalError(reg.waiting?'新しい版があります。このアプリの画面をすべて閉じてから開き直してください。':'更新確認を行いました。新しい版がある場合は、画面を閉じてから開き直してください。');}catch(e){showModalError('更新を確認できませんでした。接続を確認してください。');}};
   }
   $('importInput').addEventListener('change',async e=>{

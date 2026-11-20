@@ -118,3 +118,8 @@ input:disabled{opacity:.6;background:#eeefe8}
 
 .league-annotations{display:inline-flex;align-items:center;gap:4px;flex-shrink:0}.league-match-result{font-size:.68rem;white-space:nowrap;color:#745653}.league-match-won{font-weight:700;color:#164d3d}.osho-person .class-person-link{flex:1}
 .osho-table .league-group th{width:auto;text-align:left;padding:9px 8px;font-weight:700;background:#edf0e8;border-top:1px solid var(--line)}.osho-table .league-group-R th{background:#f6e8e6}.osho-table .league-group-W th{background:#f2f3ed}
+
+.competition-table th:first-child,.competition-table td:first-child{width:46%}.competition-table th:nth-child(2),.competition-table td:nth-child(2){width:14%}.competition-table th:nth-child(n+3),.competition-table td:nth-child(n+3){width:20%}
+.season-person{display:flex;align-items:center;justify-content:space-between;gap:5px;min-width:0}.season-person .class-person-link{min-width:0;font-size:.86rem;flex:1}.season-records{display:grid;gap:4px;flex:0 1 65px;min-width:0}.season-record-line{font-size:.69rem;line-height:1.55;overflow-wrap:anywhere}.season-record-won{color:#164d3d;font-weight:700}.season-records:empty{display:none}
+.competition-table td:nth-child(2){font-size:.8rem}.competition-table .badge{min-width:40px;max-width:100%;font-size:.8rem}.competition-table .competition-group th{width:auto;text-align:left;padding:9px 8px;font-weight:700;background:#edf0e8}.competition-holder td{background:#faf4df;border-bottom:2px solid #d6c595!important}
+.competition-table .blank{min-width:40px}.competition-table td:nth-child(n+3){padding-left:3px;padding-right:3px}
